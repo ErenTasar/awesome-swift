@@ -1,711 +1,1001 @@
 <!DOCTYPE html>
+
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Son Dokunuş — Deductions</title>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-    :root {
-      --bg-deep: #0a0a0f;
-      --bg-surface: #141420;
-      --bg-surface-hover: #1c1c2e;
-      --text-primary: #e8e4dc;
-      --text-secondary: #9a9484;
-      --text-muted: #5a5650;
-      --accent-gold: #c9a84c;
-      --accent-gold-dim: rgba(201, 168, 76, 0.15);
-      --accent-red: #8b3a3a;
-      --accent-red-dim: rgba(139, 58, 58, 0.15);
-      --border: #2a2a3a;
-      --border-active: rgba(201, 168, 76, 0.5);
-      --font-serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
-      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    }
+```
+:root {
+  --bg-deep: #0a0a0f;
+  --bg-surface: #131320;
+  --bg-surface-hover: #1a1a2c;
+  --text-primary: #e8e4dc;
+  --text-secondary: #9a9484;
+  --text-muted: #5a5650;
+  --accent-gold: #c9a84c;
+  --accent-gold-dim: rgba(201, 168, 76, 0.12);
+  --accent-red: #8b3a3a;
+  --accent-red-dim: rgba(139, 58, 58, 0.12);
+  --border: #252535;
+  --border-active: rgba(201, 168, 76, 0.5);
+  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+}
 
-    html, body {
-      height: 100%;
-      overflow: hidden;
-      background: var(--bg-deep);
-      color: var(--text-primary);
-      font-family: var(--font-sans);
-      -webkit-font-smoothing: antialiased;
-      overscroll-behavior: none;
-      animation: breathe 8s ease-in-out infinite;
-    }
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
 
-    @keyframes breathe {
-      0%, 100% { background-color: #0a0a0f; }
-      50% { background-color: #0b0a12; }
-    }
+#app {
+  max-width: 480px;
+  margin: 0 auto;
+  height: 100dvh;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
 
-    #app {
-      max-width: 480px;
-      margin: 0 auto;
-      height: 100dvh;
-      height: 100vh;
-      position: relative;
-      overflow: hidden;
-      padding-top: env(safe-area-inset-top);
-      padding-bottom: env(safe-area-inset-bottom);
-    }
+/* Film grain */
+#app::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 128px 128px;
+}
 
-    /* Film grain */
-    #app::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      z-index: 100;
-      pointer-events: none;
-      opacity: 0.04;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-      background-size: 128px 128px;
-    }
+/* Vignette */
+#app::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 50%, transparent 50%, rgba(0, 0, 0, 0.4) 100%);
+}
 
-    /* Vignette */
-    #app::after {
-      content: '';
-      position: fixed;
-      inset: 0;
-      z-index: 99;
-      pointer-events: none;
-      background: radial-gradient(ellipse at 50% 50%, transparent 50%, rgba(0, 0, 0, 0.45) 100%);
-    }
+.screen { display: none; flex-direction: column; height: 100%; }
+.screen.active { display: flex; }
 
-    /* --- Screens --- */
-    .screen { display: none; flex-direction: column; height: 100%; }
-    .screen.active { display: flex; }
+/* ═══════ Title Screen ═══════ */
+#screen-title {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 2rem;
+  animation: fadeIn 1.5s ease;
+  background: radial-gradient(ellipse at 50% 38%, #161628 0%, var(--bg-deep) 70%);
+}
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--accent-gold);
+  margin-bottom: 1rem;
+}
+#screen-title h1 {
+  font-family: var(--font-serif);
+  font-size: 2.6rem;
+  font-weight: 700;
+  line-height: 1.15;
+  margin-bottom: 0.4rem;
+}
+#screen-title .subtitle {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  margin-bottom: 3rem;
+}
+.btn-primary {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--bg-deep);
+  background: var(--accent-gold);
+  border: none;
+  padding: 0.85rem 2rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-primary:active { opacity: 0.8; transform: scale(0.97); }
 
-    /* --- Title Screen --- */
-    #screen-title {
-      justify-content: center;
-      align-items: center;
-      text-align: center;
-      padding: 2rem;
-      animation: fadeIn 1.5s ease;
-      background: radial-gradient(ellipse at 50% 40%, #1a1a2e 0%, var(--bg-deep) 70%);
-    }
-    #screen-title .eyebrow {
-      font-family: var(--font-sans);
-      font-size: 0.7rem;
-      font-weight: 600;
-      letter-spacing: 0.25em;
-      text-transform: uppercase;
-      color: var(--accent-gold);
-      margin-bottom: 1rem;
-    }
-    #screen-title h1 {
-      font-family: var(--font-serif);
-      font-size: 2.4rem;
-      font-weight: 700;
-      line-height: 1.2;
-      margin-bottom: 0.5rem;
-    }
-    #screen-title .subtitle {
-      font-family: var(--font-serif);
-      font-style: italic;
-      font-size: 1rem;
-      color: var(--text-secondary);
-      margin-bottom: 3rem;
-    }
-    .btn-primary {
-      font-family: var(--font-sans);
-      font-size: 0.85rem;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--bg-deep);
-      background: var(--accent-gold);
-      border: none;
-      padding: 0.9rem 2.2rem;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: opacity 0.2s;
-      touch-action: manipulation;
-    }
-    .btn-primary:active { opacity: 0.8; transform: scale(0.97); }
+/* ═══════ Game Screen ═══════ */
+#screen-game { padding: 0; position: relative; }
 
-    /* --- Game Screen --- */
-    #screen-game { padding: 0; position: relative; }
+/* Story Panel */
+#story-panel {
+  padding: 1rem 1.1rem 0.75rem;
+  flex-shrink: 0;
+  max-height: 32vh;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  border-bottom: 1px solid var(--border);
+  -webkit-overflow-scrolling: touch;
+}
+#story-panel::-webkit-scrollbar { width: 2px; }
+#story-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-    #story-panel {
-      padding: 1.5rem 1.25rem 1rem;
-      flex-shrink: 0;
-      border-bottom: 1px solid var(--border);
-    }
-    .scene-label {
-      font-family: var(--font-sans);
-      font-size: 0.65rem;
-      font-weight: 600;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: var(--accent-gold);
-      margin-bottom: 0.6rem;
-    }
-    .story-text {
-      font-family: var(--font-serif);
-      font-size: 1rem;
-      line-height: 1.75;
-      color: var(--text-primary);
-    }
-    .story-text .line {
-      display: block;
-      opacity: 0;
-      transform: translateY(6px);
-      transition: opacity 0.6s ease, transform 0.6s ease;
-    }
-    .story-text .line.visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
+.scene-label {
+  font-family: var(--font-sans);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent-gold);
+  margin-bottom: 0.5rem;
+}
+.story-text {
+  font-family: var(--font-serif);
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: var(--text-primary);
+}
+.story-text .line {
+  display: inline;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+.story-text .line.visible { opacity: 1; }
+.story-update {
+  display: block;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  margin-top: 0.3rem;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+.story-update.visible { opacity: 1; transform: translateY(0); }
 
-    /* --- Deduction Panel --- */
-    #deduction-panel {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.5s ease, padding 0.5s ease;
-      padding: 0 1.25rem;
-    }
-    #deduction-panel.show {
-      max-height: 160px;
-      padding: 0.75rem 1.25rem;
-    }
-    .deduction-box {
-      padding: 0.75rem 1rem;
-      border-radius: 4px;
-      font-size: 0.85rem;
-      line-height: 1.6;
-    }
-    .deduction-box.correct {
-      background: transparent;
-      border-left: 2px solid var(--accent-gold);
-      color: var(--text-secondary);
-      font-family: var(--font-serif);
-      font-style: italic;
-      animation: thoughtAppear 0.8s ease forwards;
-    }
-    .deduction-box.wrong {
-      background: var(--accent-red-dim);
-      border-left: 2px solid var(--accent-red);
-      color: var(--text-secondary);
-      font-family: var(--font-serif);
-      font-style: italic;
-      animation: thoughtAppear 0.6s ease forwards;
-    }
+/* Deduction Panel */
+#deduction-panel {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s ease, padding 0.4s ease;
+  padding: 0 1.1rem;
+  flex-shrink: 0;
+}
+#deduction-panel.show {
+  max-height: 120px;
+  padding: 0.5rem 1.1rem;
+}
+.deduction-box {
+  padding: 0.6rem 0.85rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+.deduction-box.correct {
+  background: transparent;
+  border-left: 2px solid var(--accent-gold);
+  color: var(--text-secondary);
+  font-family: var(--font-serif);
+  font-style: italic;
+  animation: thoughtAppear 0.6s ease forwards;
+}
+.deduction-box.wrong {
+  background: var(--accent-red-dim);
+  border-left: 2px solid var(--accent-red);
+  color: var(--text-secondary);
+  font-family: var(--font-serif);
+  font-style: italic;
+  animation: thoughtAppear 0.5s ease forwards;
+}
 
-    /* --- Clues Panel --- */
-    #clues-panel {
-      flex: 1;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.65rem;
-      padding: 0.75rem 1rem;
-      overflow-y: auto;
-    }
-    .clue-column {
-      display: flex;
-      flex-direction: column;
-      gap: 0.65rem;
-      min-height: 0;
-    }
+/* ═══════ Clues Panel ═══════ */
+#clues-panel {
+  flex: 1;
+  display: flex;
+  gap: 0.45rem;
+  padding: 0.5rem 0.65rem;
+  overflow: hidden;
+  min-height: 0;
+}
+.clue-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 2px;
+  min-height: 0;
+}
+.clue-column::-webkit-scrollbar { width: 0; }
 
-    .clue {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      font-family: var(--font-sans);
-      font-size: 0.82rem;
-      line-height: 1.5;
-      color: var(--text-primary);
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.8rem 0.9rem;
-      cursor: pointer;
-      text-align: left;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.15);
-      transition: border-color 0.3s, background-color 0.3s, transform 0.3s ease,
-                  opacity 0.5s, box-shadow 0.3s ease, filter 0.3s ease;
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .clue:active { transform: scale(0.97); }
-    .clue:hover { background: var(--bg-surface-hover); }
-    .clue.selected {
-      border-color: var(--border-active);
-      background: var(--accent-gold-dim);
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 20px rgba(201, 168, 76, 0.08);
-    }
-    .clue.matched {
-      border-color: var(--accent-gold);
-      box-shadow: 0 0 15px rgba(201, 168, 76, 0.3), 0 0 30px rgba(201, 168, 76, 0.1);
-      background: rgba(201, 168, 76, 0.1);
-      transition: all 0.4s ease;
-    }
-    .clue.solved {
-      opacity: 0.2;
-      pointer-events: none;
-      transform: scale(0.97);
-      box-shadow: none;
-    }
-    .clue.wrong {
-      filter: brightness(0.6) saturate(0.5);
-    }
-    .clue.shake {
-      animation: shakeX 0.4s ease;
-    }
+.clue {
+  display: block;
+  width: 100%;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--border);
+  border-radius: 5px;
+  padding: 0.55rem 0.6rem;
+  cursor: pointer;
+  text-align: left;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  transition: border-color 0.3s, background 0.3s, transform 0.2s,
+              opacity 0.4s, box-shadow 0.3s, max-height 0.5s ease, 
+              padding 0.5s ease, margin 0.5s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+  max-height: 120px;
+  overflow: hidden;
+}
+.clue:active { transform: scale(0.97); }
+.clue.selected {
+  border-left-color: var(--accent-gold);
+  border-color: var(--border-active);
+  background: var(--accent-gold-dim);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3), 0 0 15px rgba(201,168,76,0.06);
+}
+.clue.matched {
+  border-left-color: var(--accent-gold);
+  border-color: var(--accent-gold);
+  box-shadow: 0 0 12px rgba(201,168,76,0.25);
+  background: rgba(201,168,76,0.08);
+}
+.clue.collapsing {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  opacity: 0;
+  border-width: 0;
+  overflow: hidden;
+}
+.clue.shake { animation: shakeX 0.35s ease; }
+.clue.wrong-flash { 
+  border-left-color: var(--accent-red);
+  background: var(--accent-red-dim);
+}
 
-    /* --- Progress --- */
-    #progress-bar {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.85rem 1rem;
-      flex-shrink: 0;
-    }
-    .progress-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--border);
-      transition: background 0.4s ease, box-shadow 0.4s ease;
-    }
-    .progress-dot.filled {
-      background: var(--accent-gold);
-      box-shadow: 0 0 6px rgba(201, 168, 76, 0.4);
-    }
-    .progress-divider {
-      width: 1px; height: 14px;
-      background: var(--border);
-      margin: 0 0.25rem;
-    }
+/* ═══════ Progress ═══════ */
+#progress-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.6rem 1rem;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+}
+.progress-chapter {
+  font-family: var(--font-serif);
+  font-size: 0.75rem;
+  color: var(--accent-gold);
+  margin-right: 0.3rem;
+  font-weight: 700;
+}
+.progress-pip {
+  width: 16px;
+  height: 3px;
+  border-radius: 1.5px;
+  background: var(--border);
+  transition: background 0.4s ease, box-shadow 0.4s ease;
+}
+.progress-pip.filled {
+  background: var(--accent-gold);
+  box-shadow: 0 0 4px rgba(201,168,76,0.3);
+}
 
-    /* --- Scene Fade --- */
-    #scene-fade {
-      position: absolute;
-      inset: 0;
-      background: #000;
-      z-index: 10;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 1s ease;
-    }
-    #scene-fade.active {
-      opacity: 1;
-      pointer-events: auto;
-    }
+/* ═══════ Scene Fade ═══════ */
+#scene-fade {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.8s ease;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+#scene-fade.active { opacity: 1; pointer-events: auto; }
+#scene-fade .chapter-title {
+  font-family: var(--font-serif);
+  font-size: 1.6rem;
+  color: var(--accent-gold);
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+#scene-fade.show-title .chapter-title { opacity: 1; }
 
-    /* --- Reveal Screen --- */
-    #screen-reveal {
-      justify-content: center;
-      align-items: center;
-      text-align: center;
-      padding: 2rem;
-      background: #000;
-      animation: revealBg 2s ease forwards;
-    }
-    .reveal-label {
-      font-family: var(--font-sans);
-      font-size: 0.65rem;
-      font-weight: 600;
-      letter-spacing: 0.25em;
-      text-transform: uppercase;
-      color: var(--accent-gold);
-      margin-bottom: 1.5rem;
-      opacity: 0;
-      animation: fadeIn 1s ease 0.3s forwards;
-    }
-    #reveal-text {
-      font-family: var(--font-serif);
-      font-size: 1.1rem;
-      line-height: 1.8;
-      color: var(--text-primary);
-      max-width: 360px;
-      min-height: 180px;
-    }
-    #reveal-text strong { color: var(--accent-gold); }
-    #btn-replay {
-      margin-top: 2.5rem;
-      opacity: 0;
-      transition: opacity 0.6s ease;
-    }
-    #btn-replay.show { opacity: 1; }
+/* ═══════ Reveal Screen ═══════ */
+#screen-reveal {
+  justify-content: flex-start;
+  align-items: center;
+  text-align: center;
+  padding: 2.5rem 1.5rem 2rem;
+  background: #000;
+  animation: revealBg 2s ease forwards;
+  overflow-y: auto;
+}
+.reveal-label {
+  font-family: var(--font-sans);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--accent-gold);
+  margin-bottom: 1.5rem;
+  opacity: 0;
+  animation: fadeIn 1s ease 0.3s forwards;
+}
+#reveal-text {
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+  line-height: 1.8;
+  color: var(--text-primary);
+  max-width: 380px;
+  text-align: left;
+}
+#reveal-text strong { color: var(--accent-gold); }
+#reveal-text p { margin-bottom: 1rem; }
+#btn-replay {
+  margin-top: 2rem;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  flex-shrink: 0;
+}
+#btn-replay.show { opacity: 1; }
 
-    /* --- Animations --- */
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes thoughtAppear {
-      0% { opacity: 0; transform: translateY(4px); }
-      100% { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes shakeX {
-      0%, 100% { transform: translateX(0); }
-      20% { transform: translateX(-4px); }
-      40% { transform: translateX(4px); }
-      60% { transform: translateX(-3px); }
-      80% { transform: translateX(3px); }
-    }
-    @keyframes revealBg {
-      from { background: #000; }
-      to { background: var(--bg-deep); }
-    }
+/* ═══════ Animations ═══════ */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes thoughtAppear {
+  0% { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes shakeX {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+@keyframes revealBg {
+  from { background: #000; }
+  to { background: var(--bg-deep); }
+}
+```
+
   </style>
 </head>
 <body>
   <div id="app">
-    <!-- Title -->
     <div id="screen-title" class="screen active">
       <div class="eyebrow">Deductions</div>
       <h1>Son Dokunuş</h1>
-      <p class="subtitle">Bir ressam, bir villa, bir kış gecesi.</p>
+      <p class="subtitle">Bir yalı, bir restoratör, bir kış gecesi.</p>
       <button class="btn-primary" onclick="startGame()">Soruşturmaya Başla</button>
     </div>
 
-    <!-- Game -->
-    <div id="screen-game" class="screen">
-      <div id="story-panel">
-        <div class="scene-label" id="scene-label"></div>
-        <div class="story-text" id="story-text"></div>
-      </div>
-      <div id="deduction-panel">
-        <div class="deduction-box" id="deduction-box"></div>
-      </div>
-      <div id="clues-panel">
-        <div class="clue-column" id="col-left"></div>
-        <div class="clue-column" id="col-right"></div>
-      </div>
-      <div id="progress-bar"></div>
-      <div id="scene-fade"></div>
-    </div>
+```
+<div id="screen-game" class="screen">
+  <div id="story-panel">
+    <div class="scene-label" id="scene-label"></div>
+    <div class="story-text" id="story-text"></div>
+    <div id="story-updates"></div>
+  </div>
+  <div id="deduction-panel">
+    <div class="deduction-box" id="deduction-box"></div>
+  </div>
+  <div id="clues-panel">
+    <div class="clue-column" id="col-left"></div>
+    <div class="clue-column" id="col-right"></div>
+  </div>
+  <div id="progress-bar"></div>
+  <div id="scene-fade"><span class="chapter-title" id="chapter-title-text"></span></div>
+</div>
 
-    <!-- Reveal -->
-    <div id="screen-reveal" class="screen">
-      <div class="reveal-label">Sonuç</div>
-      <div id="reveal-text"></div>
-      <button class="btn-primary" id="btn-replay" onclick="resetGame()">Yeniden Oyna</button>
-    </div>
+<div id="screen-reveal" class="screen">
+  <div class="reveal-label">Sonuç</div>
+  <div id="reveal-text"></div>
+  <button class="btn-primary" id="btn-replay" onclick="resetGame()">Yeniden Oyna</button>
+</div>
+```
+
   </div>
 
-  <script>
-    const SCENES = [
-      {
-        title: "Sahne 1 — Villa'nın Atölyesi",
-        story: "Ressam Ada Serin, kış gecesinin ortasında villasının atölyesinde ölü bulundu. Son tablosu yarım kalmış, yerde kırık bir şarap kadehi. Otopsi sonucu: zehirlenme.",
-        left: [
-          "Kırık şarap kadehindeki leke",
-          "Yarım tablodaki gizli imza",
-          "Şöminenin yanındaki kül"
-        ],
-        right: [
-          "Masadaki ikinci kadeh izi",
-          "İmza Ada'nın değil",
-          "Yakılmış mektup köşesi"
-        ],
-        matches: [
-          { l: 0, r: 0, text: "Ada yalnız değildi. Biriyle şarap içiyordu. Katil, tanıdığı biriydi." },
-          { l: 1, r: 1, text: "Tablodaki gizli imza Ada'ya ait değil. Birisi onun eserini sahiplenmek istiyordu." },
-          { l: 2, r: 2, text: "Birisi bir mektubu aceleyle yakmış. Köşede okunan tek kelime: 'miras.'" }
-        ],
-        wrongs: {
-          "0-1": "Kadeh lekesi ile imza arasında doğrudan bir bağlantı yok.",
-          "0-2": "Kırık kadeh ile yakılmış mektup farklı olaylara işaret ediyor.",
-          "1-0": "Gizli imza ile ikinci kadeh izi farklı ipuçlarına ait.",
-          "1-2": "İmza ile yakılmış mektup arasında bir bağ kurulamıyor.",
-          "2-0": "Şöminedeki kül ile kadeh izi bağlantısız görünüyor.",
-          "2-1": "Kül ile imza farklı kanıt zincirlerine ait."
+<script>
+const SCENES = [
+  {
+    title: "Bölüm I — Atölye",
+    story: "Profesör Kerem Arslantürk, kış gecesinin sonunda yalısının restorasyon atölyesinde ölü bulundu. Masasında yarım kalmış bir restorasyon çalışması, yanında soğumuş bir çay. Kapı içeriden kilitliydi. İlk bulgular doğal bir kalp krizine işaret ediyor.",
+    left: [
+      "Çay bardağının kulpu sola dönük",
+      "Kapı içeriden sürgülü ama anahtar kilidi açık",
+      "Masadaki büyütecin odağı maksimumda",
+      "Kerem'in son notu: \"Pigment 47 — kontrol et, İ.S.\"",
+      "Yerde birkaç damla tuzlu su",
+      "Çay tabağının altında küçük bir kâğıt",
+      "Kerem'in gözlüğü masada değil, kapının yanında yerde",
+      "Şöminede yakılmış kâğıt kalıntıları",
+      "Atölyede iki farklı ayakkabı izi — biri 42, biri 37",
+      "Otopsi: \"Kalp krizi ile uyumlu\" ama toksikoloji bekliyor"
+    ],
+    right: [
+      "Kerem sağ elini kullanırdı",
+      "Atölye penceresinin menteşe yağı taze",
+      "Büyüteç altında 19. yüzyıl sentetik pigmenti",
+      "UV lambası açık bırakılmış, tabloya doğru",
+      "Su izleri atölyeden seraya giden koridorda",
+      "Kâğıtta \"sera, 20:00\" yazıyor",
+      "Gözlük camında atölyeye ait olmayan bir boya lekesi",
+      "Yanmamış köşede \"...vasiyetimi değişt...\" okunuyor",
+      "Kerem'in ayakkabı numarası 44",
+      "Konvallatoksin, kalp krizi semptomlarını birebir taklit eder"
+    ],
+    matches: [
+      { l:0, r:0, text:"Bardağı tutan kişi solaktı — kulpu kendi alışkanlığıyla sola çevirmiş. Kerem çayı kendisi koymamış.", storyUpdate:"Çayını o gece başka biri hazırlamış." },
+      { l:1, r:1, text:"Sürgü içeriden kapatılmış gibi görünüyor ama anahtar kilidi açık. Pencere menteşeleri yeni yağlanmış — biri pencereyi sessizce kapatabilmek için hazırlık yapmış.", storyUpdate:"Kilitli oda yanılsamasını biri özenle kurgulamış." },
+      { l:2, r:2, text:"Kerem büyüteci son kez bizzat ayarlamış — ve gördüğü şey onu şoke etmiş olmalı. 'Osmanlı' tablosunda, 17. yüzyılda var olamayacak bir sentetik pigment. Tablo sahte.", storyUpdate:"Kerem o gece tablonun sahte olduğunu keşfetmiş." },
+      { l:3, r:3, text:"Kerem pigment testini UV lambasıyla doğrulamış. Notundaki 'İ.S.' bir ismin baş harfleri — İlhan Soylu. Kerem, sahtekârın kimliğinden şüpheleniyordu.", storyUpdate:"Notlarındaki 'İ.S.' baş harfleri bir şüpheliyi işaret ediyor." },
+      { l:4, r:4, text:"Deniz suyu damlacıkları — biri iskeleden gelmiş. Ama doğrudan atölyeye girmemiş, önce seraya uğramış. O gece seradan bir şey aldı.", storyUpdate:"Biri o gece deniz yoluyla yalıya gelmiş ve seraya uğramış." },
+      { l:5, r:5, text:"Kerem bu notu bardağın altına saklamış — bir refleks, sanki kanıt biriktiriyormuş gibi. Biri ona saat 20'de seraya gelmesini söylemiş.", storyUpdate:"Kerem'e sera buluşmasını planlayanla çayını getiren kişi aynı olabilir." },
+      { l:6, r:6, text:"Gözlük kapıya yakın düşmüş — biri girerken düşürmüş. Camdaki boya bu atölyeden değil — farklı bir atölyeyle temas eden birinden bulaşmış.", storyUpdate:"O gece atölyeye gelen kişi, başka bir atölyeden geliyordu." },
+      { l:7, r:7, text:"Birisi aceleyle belgeleri yakmış. Ama tam yanamayan köşe her şeyi ele veriyor: Kerem vasiyetini değiştirmek üzereydi.", storyUpdate:"Kerem vasiyetini değiştirmek istiyordu — birisi bunu engelledi." },
+      { l:8, r:8, text:"İki iz, ikisi de Kerem'e ait değil. O gece atölyeye en az iki farklı kişi girmiş — biri erkek, biri kadın. Tek kişilik bir cinayet değil.", storyUpdate:"En az iki kişi o gece atölyedeydi — bu bir ortaklık." },
+      { l:9, r:9, text:"Standart otopsi kalp krizine işaret ediyor — mükemmel bir örtbas. Konvallatoksin, standart panelde aranmayan nadir bir bitki zehiri. Tespit edilmesi neredeyse imkânsız bir zehir seçilmiş.", storyUpdate:"Bu kalp krizi değil. Birisi Kerem'i neredeyse iz bırakmadan zehirledi." }
+    ],
+    wrongs: {
+      "0-9":"Bardağın yönü zehrin türüyle değil, onu koyan kişiyle ilgili.",
+      "0-5":"Çay bardağının yönü ile sera buluşması farklı ipuçlarına ait.",
+      "2-3":"Büyüteç ve UV farklı aşamalarda kullanılmış — birlikte değil, sırayla.",
+      "3-6":"Not bir şüpheliye işaret ediyor ama gözlükteki boya ayrı bir kanıt zinciri.",
+      "4-7":"Deniz suyu izleri vasiyetle değil, fiziksel bir güzergâhla ilgili.",
+      "5-9":"Sera ve zehir bağlantısı çekici ama buradaki eşleşme farklı.",
+      "6-8":"Gözlüğün düşmesi Kerem'in ayakkabı numarasıyla değil, gelen kişiyle ilgili.",
+      "7-1":"Yakılan belge ile pencere hazırlığı farklı olaylara ait.",
+      "8-0":"Ayakkabı izleri el tercihi ile ilişkili değil.",
+      "9-4":"Toksikoloji sonucu fiziksel güzergâhla değil, zehrin kimyasıyla eşleşiyor."
+    },
+    wrongFallback: "Bu ipuçları farklı kanıt zincirlerine ait — aradaki bağlantı dolaylı."
+  },
+  {
+    title: "Bölüm II — Son Akşam",
+    story: "Kerem o akşam beş kişiyi yemeğe davet etmişti. Kütüphanede uzun bir masa, altı kişilik servis. Yemekte gergin bir atmosfer hâkimdi — ev sahibi 'önemli bir açıklama' yapacağını söylemişti.",
+    left: [
+      "Yemek masasında altı tabak ama yedi bardak",
+      "Zeynep'in çantasında yalının bodrum arşivinin anahtarı",
+      "Mediha yemeği erken bırakıp \"başım ağrıyor\" demiş",
+      "Kerem: \"Bu akşam her şeyi anlatacağım\" demiş",
+      "Elektrik kesildiğinde Canan masada yoktu",
+      "İlhan'ın o akşam yalıda olmadığını herkes doğruluyor",
+      "Kaptan Hasan o gece \"erken uyudum\" diyor",
+      "Yemekte Doğan, Kerem'e \"tabloyu acele ettirmeyelim\" demiş",
+      "Canan yemekte Kerem'e \"çayınızı ben getireyim\" demiş",
+      "Kerem yemekten sonra atölyesine çekilmiş — \"son bir kontrol\" demiş"
+    ],
+    right: [
+      "Doğan Bey'in \"geç kaldığını\" söyleyen mesajı",
+      "Zeynep'in Floransa'ya dönüş bileti: ertesi sabah 06:15",
+      "Mediha'nın odasının ışığı gece boyunca yanıyormuş",
+      "Açıklama yapılmadan elektrikler kesilmiş — 5 dakika",
+      "Sigorta kutusu iskelenin yanında, içeriden erişilemez",
+      "İskelede o gece bağlanmış ikinci bir kayık",
+      "Hasan'ın kulübesinde kafein tableti kalıntısı",
+      "Doğan'ın telefonunda İlhan'a: \"Her şeyi biliyor. Bu gece.\"",
+      "Mutfak defterinde o akşam papatya çayı hazırlandığı notu",
+      "Atölyedeki saatin 22:47'de durmuş olması"
+    ],
+    matches: [
+      { l:0, r:0, text:"Altı kişilik davet ama yedi bardak — biri davet edilmeden gelmiş. Doğan'ın 'geç kalıyorum' mesajı bir kılıf: o zaten oradaydı ya da birini daha getirmişti.", storyUpdate:"O gece masada olmayan bir yedinci kişi vardı." },
+      { l:1, r:1, text:"Zeynep o gece bodrum arşivine inmeyi planlıyordu — ve sabah erkenden kaçarcasına gidecekti. Bir şeyleri almaya gelmişti, ziyarete değil.", storyUpdate:"Zeynep'in yalıda olmasının gerçek sebebi, arşivdeki belgelerdi." },
+      { l:2, r:2, text:"Mediha erken çekildi ama uyumamış — ışığı sabaha kadar yanıyordu. Baş ağrısı bahane; ya bir şey bekliyordu, ya bir şey biliyordu.", storyUpdate:"Mediha yemeği terk ettiğinde gizlediği bir şey vardı." },
+      { l:3, r:3, text:"Kerem tam açıklamasını yapacakken elektrikler kesildi. Yalının sigorta kutusu dışarıda, iskelenin yanında. Birisi Kerem'i susturmak için hazırlık yapmıştı.", storyUpdate:"Kerem'in açıklaması kasıtlı olarak engellendi." },
+      { l:4, r:4, text:"Elektriği kesen kişi dışarıya çıkmak zorundaydı. Canan masada yoktu — ve sigorta kutusuna giden yol seradan geçiyor.", storyUpdate:"Canan, elektrik kesilmeden hemen önce masadan kalkmıştı." },
+      { l:5, r:5, text:"Herkes İlhan'ın orada olmadığını söylüyor — ama iskelede tanınmayan bir kayık var. İlhan resmi davetli değildi, ama o gece yalıya denizden gizlice gelmiş olabilir.", storyUpdate:"İlhan 'orada değildi' — ama iskeledeki kayık başka bir şey söylüyor." },
+      { l:6, r:6, text:"Hasan erken uyuduğunu söylüyor ama kafein tableti almış — uyumaya değil, uyanık kalmaya çalışıyormuş. Birini bekliyor veya izliyordu. Yalan söylüyor.", storyUpdate:"Kaptan Hasan yalan söylüyor. O gece bir şey gördü." },
+      { l:7, r:7, text:"Doğan masada sakin görünmeye çalışıyordu — 'acele etmeyelim' derken zaman kazanıyordu. Ama İlhan'a attığı mesaj panik dolu: 'Her şeyi biliyor.' Doğan, Kerem'in sahteciliği keşfettiğini biliyordu.", storyUpdate:"Doğan, Kerem'in sahteciliği bildiğini anlayınca İlhan'ı uyarmıştı." },
+      { l:8, r:8, text:"Canan çay getirmeyi teklif etmiş. Mutfak defterine göre o akşam papatya çayı hazırlanmış. Papatyanın güçlü kokusu, başka bir maddenin acı tadını gizlemek için ideal bir seçim.", storyUpdate:"Canan çayı bizzat hazırlamayı teklif etmişti — çay türü bile özenle seçilmişti." },
+      { l:9, r:9, text:"Kerem yemekten sonra atölyeye gitmiş — çay elinde. Saat 22:47'yi gösteriyor, Kerem düşerken çarpmış. Zehir yaklaşık 2-3 saatte etki ediyor — çay, saat 20:00 civarında hazırlanmıştı.", storyUpdate:"Zaman çizelgesi netleşiyor: zehir yemeğin hemen ardından verildi." }
+    ],
+    wrongs: {
+      "0-5":"Fazla bardak masadaki bir ziyaretçiye, kayık ise iskeleden gelene ait — ikisi bağlantılı ama eşleşmeleri farklı.",
+      "1-2":"Zeynep'in arşiv planı ile Mediha'nın uykusuzluğu farklı gizemlere ait.",
+      "3-7":"Kerem'in açıklama niyeti ile Doğan'ın mesajı ilişkili ama doğrudan eşleşmeleri farklı ipuçlarıyla.",
+      "4-8":"Canan'ın masadan kalkması ile çay türü bağlantılı ama buradaki eşleşme elektrik kesintisi üzerinden.",
+      "5-6":"İlhan'ın yokluğu ile Hasan'ın tableti farklı yalanları ifşa ediyor.",
+      "6-5":"Hasan kayığı görmüş olabilir ama tabletteki kanıt kendi yalanını deşifre ediyor.",
+      "8-4":"Canan'ın çay teklifi ile sigorta kutusu farklı olaylara ait.",
+      "9-0":"Kerem'in atölyeye gidişi ile Doğan'ın mesajı farklı zaman dilimlerine ait.",
+      "7-5":"Doğan'ın sözleri ile kayık farklı kanıtlarla eşleşiyor."
+    },
+    wrongFallback: "Çekici bir bağlantı ama bu iki ipucu farklı olayları aydınlatıyor."
+  },
+  {
+    title: "Bölüm III — Sahte Renkler",
+    story: "Soruşturma derinleştikçe, tablonun arkasındaki sır katman katman açılıyor. Kerem'in atölyesinde bulunan belgeler, yıllar süren bir sahtekârlık operasyonunu gün yüzüne çıkarıyor.",
+    left: [
+      "Tablonun arkasındaki UV'de görünen \"İ.S.\" monogramı",
+      "Kerem'in arşivinde 15 yıllık restorasyon kayıtları",
+      "Doğan'ın banka hesabına yılda düzensiz yüksek girişler",
+      "İlhan'ın eski atölyesinden çıkan pigment sipariş faturaları",
+      "Canan'ın doktora tezi: \"Osmanlı Pigmentlerinin Spektral Analizi\"",
+      "Kerem'in defterinde: \"Bu yıl üç tablo daha — hepsi şüpheli\"",
+      "Mediha'nın kasasında, Doğan'dan gelen yıllık \"bağış\" makbuzları",
+      "Zeynep'in Floransa'daki bir müzayede evine gönderdiği e-posta",
+      "Kerem'in son hafta 3 kez İnterpol Sanat Suçları birimine araması",
+      "Doğan'ın koleksiyonundaki sigorta değeri: 40 milyon euro"
+    ],
+    right: [
+      "İlhan Soylu'nun tüm eserlerine gizli monogram koyma alışkanlığı",
+      "Kayıtlardaki 12 tablonun \"orijinal\" kopyaları farklı koleksiyonlarda",
+      "Girişlerin tarihleri, Kerem'in restorasyon teslim tarihleriyle örtüşüyor",
+      "Faturalardaki pigmentler, Kerem'in restore ettiği tablolarla eşleşiyor",
+      "Tez danışmanı: Prof. Kerem — ama veri kaynağı İlhan'ın atölyesi",
+      "Aynı üç tablo, geçen ay Londra'da müzayedeye çıkmış",
+      "Bağışlar, yalının yıllık bakım masrafıyla birebir örtüşüyor",
+      "E-postada: \"Babamın arşivindeki belgeleri teslim edebilirim\"",
+      "İnterpol'ün Kerem'e: \"Resmi başvuru için belge gerekiyor\" yanıtı",
+      "Sigorta şirketi geçen ay \"bağımsız doğrulama\" talep etmiş"
+    ],
+    matches: [
+      { l:0, r:0, text:"Tablonun arkasındaki monogram, İlhan'ın imzası. Sahtekâr, egosu yüzünden kendi eserini işaretlemiş — restorasyoncunun görmeyeceğini sanmış. Ama Kerem gördü.", storyUpdate:"Sahte tabloyu yapan kişi İlhan Soylu — kendi monogramıyla yakalandı." },
+      { l:1, r:1, text:"Kerem 15 yılda onlarca tablo restore etmiş. Ama aynı tabloların 'orijinal' kopyaları farklı koleksiyonlarda. Birisi kopyalarını yapıp orijinal olarak satmış — Kerem habersizce sahtekârlığa alet edilmişti.", storyUpdate:"Operasyon 15 yıldır sürüyormuş. Kerem farkında olmadan alet edilmiş." },
+      { l:2, r:2, text:"Doğan'a gelen paralar, Kerem her restorasyon teslim ettiğinde artıyor. Kerem teslim eder, İlhan kopyalar, Doğan satar. Kerem'in restorasyonu, operasyonun tetikleyicisiydi.", storyUpdate:"Doğan Kıray operasyonun finansçısıydı." },
+      { l:3, r:3, text:"İlhan, Kerem'in kullandığı pigmentlerin aynısını sipariş etmiş — bilinçli taklit. Kopyaları orijinalden ayırt edilemez yapmak için Kerem'in malzeme listesine erişimi olmalıydı.", storyUpdate:"İlhan, kopyalarını orijinalden ayırt edilemez yapmak için Kerem'in listelerini kullanıyordu." },
+      { l:4, r:4, text:"Canan, Kerem'in danışmanlığında çalışıyor ama verilerini İlhan'ın atölyesinden alıyordu. Tezi, hangi pigmentlerin kullanılacağının haritasını çıkarıyordu — sahtekârlığın teknik kılavuzuydu.", storyUpdate:"Canan'ın doktora tezi, sahtekârlığın teknik el kitabıydı." },
+      { l:5, r:5, text:"Kerem şüphelenmeye başlamıştı — defterindeki üç tablo, Londra müzayedesinde satışa çıkmış. Ortaya çıksa Kerem'in itibarı da yerle bir olurdu.", storyUpdate:"Kerem kendi itibarını da korumak zorundaydı." },
+      { l:6, r:6, text:"Doğan yıllar boyunca Mediha'ya 'bağış' adı altında para göndermiş — tam olarak yalının bakım masrafını karşılıyor. Mediha susması karşılığında para alıyordu.", storyUpdate:"Mediha yıllardır biliyordu. Doğan'ın bağışları susma parasıydı." },
+      { l:7, r:7, text:"Zeynep, babasının arşivindeki sahtekârlık kanıtlarını Floransa'daki bir müzayede evine satmak istiyordu — ihbar değil, şantaj.", storyUpdate:"Zeynep masum değildi — arşivdeki kanıtları satmayı planlıyordu." },
+      { l:8, r:8, text:"Kerem İnterpol'e gitmişti ama elinde yeterli belge yoktu. Açıklamayı o akşam yapacaktı çünkü ertesi gün resmi başvuru yapacaktı. Katil bunu biliyordu.", storyUpdate:"Kerem ertesi gün İnterpol'e başvuracaktı — o yüzden o gece öldürülmeliydi." },
+      { l:9, r:9, text:"40 milyon euro'luk koleksiyon — ama sigorta şirketi doğrulama istiyor. Tablolar sahte çıkarsa, Doğan sadece koleksiyonunu değil, özgürlüğünü de kaybedecekti.", storyUpdate:"40 milyon euro'luk sahte koleksiyon — Doğan'ın motifi artık netleşiyor." }
+    ],
+    wrongs: {
+      "0-4":"Monogram İlhan'ın imzası, tez Canan'ın bağlantısı — farklı kanıt zincirlerine ait.",
+      "1-2":"Restorasyon kayıtları ile Doğan'ın hesabı ilişkili ama eşleşme başka ipuçlarıyla.",
+      "4-3":"Tez ve faturalar yakın konularda ama farklı bağlantıları ortaya çıkarıyor.",
+      "6-8":"Mediha'nın susma parası ile İnterpol süreci farklı ipuçlarıyla eşleşiyor.",
+      "7-9":"Zeynep'in planı ile sigorta krizi farklı kişilerin motivasyonlarına ait.",
+      "8-5":"İnterpol başvurusu ile Londra müzayedesi ilişkili ama farklı eşleşmelere ait.",
+      "5-1":"Defterindeki şüphe ile kayıtlardaki kopyalar ilişkili ama eşleşmeleri farklı."
+    },
+    wrongFallback: "Her iki ipucu da operasyonla ilgili ama farklı parçaları aydınlatıyor."
+  },
+  {
+    title: "Bölüm IV — Zehrin İzi",
+    story: "Toksikoloji raporu geldi: konvallatoksin. Nadir, bitkisel, neredeyse tespit edilemez bir zehir. İz sürüldükçe, yalının serası ve Canan'ın botanik bilgisi ön plana çıkıyor.",
+    left: [
+      "Serada Convallaria majalis saksısı — toprak taze kazılmış",
+      "Canan'ın sera defterinde: \"C. majalis — ekstraksiyon testi, akademik\"",
+      "Canan'ın telefonunda İlhan'a: \"Konsantrasyon ne kadar olsun?\"",
+      "Seradaki sulama defterinde 3 gün boşluk",
+      "Mutfaktaki bitki çayı kutusunda papatya dışında bir koku",
+      "Canan ve İlhan'ın 8 aydır ortak bir kiralık dairesi var",
+      "Kaptan Hasan'ın cebinde 50.000 TL nakit",
+      "Kerem'in kan örneğinde konvallatoksin seviyesi: tam öldürücü doz",
+      "Canan'ın bilgisayarında silinen arama: \"convallatoxin detection post-mortem\"",
+      "O gece seranın kapısında sadece iki kişinin parmak izi"
+    ],
+    right: [
+      "Bitkinin kökü ve yaprakları kesilmiş, sadece sap bırakılmış",
+      "Üniversite laboratuvarında Canan adına kayıtlı ekipman reservasyonu",
+      "İlhan'ın yanıtı: \"67 kg için hesapla. Kesin olsun.\"",
+      "Boşluk, Canan'ın \"hasta\" olduğu günlerle örtüşüyor",
+      "Konvallatoksin taze halde hafif acımsı, papatyayla maskelenebilir",
+      "Daire, İlhan'ın eski atölyesinin bulunduğu binada",
+      "Aynı seri numaralı banknotlar, İlhan'ın hesabından çekilmiş",
+      "Kardiyolog raporu: \"Kerem'in bilinen bir kalp rahatsızlığı yoktu\"",
+      "Silinen aramanın tarihi: cinayetten 2 hafta önce",
+      "Parmak izleri: Canan ve Mediha"
+    ],
+    matches: [
+      { l:0, r:0, text:"Bitkinin en zehirli kısımları — kök ve yapraklar — kesilip alınmış. Toprak taze, son birkaç gün içinde yapılmış. Biri seradaki bitkiden zehri bizzat hazırladı.", storyUpdate:"Zehrin kaynağı yalının kendi serası — bitkinin kök ve yaprakları kasıtlı olarak kesilmiş." },
+      { l:1, r:1, text:"Canan, zehir özütlemeyi 'akademik araştırma' kisvesi altında yapmış. Üniversite laboratuvarını kullandı — kayıtlar mevcut. Ama bir doktora öğrencisi için tamamen normal görünüyor.", storyUpdate:"Canan, üniversite laboratuvarında 'akademik çalışma' adı altında zehri hazırlamış." },
+      { l:2, r:2, text:"67 kilo — Kerem'in vücut ağırlığı. İlhan, dozajı bizzat belirliyor: 'Kesin olsun.' Ne az ne çok, tam öldürücü doz hesabı. İlhan cinayet emrini veren kişi.", storyUpdate:"İlhan, zehrin dozajını Kerem'in kilosuna göre hesaplatmış. Emir ondan." },
+      { l:3, r:3, text:"Canan 3 gün 'hastaydı' — ama aynı günlerde sera sulanmamış. O 3 gün, Canan'ın laboratuvarda zehri hazırladığı günler.", storyUpdate:"Canan'ın 'hasta' olduğu 3 gün, aslında laboratuvarda geçirdiği günlerdi." },
+      { l:4, r:4, text:"Papatya çayının kutusu açıldığında farklı bir koku geliyor. Konvallatoksinin acı tadı, papatyanın yoğun aromasıyla örtülüyor. Zehir çay kutusuna karıştırılmış.", storyUpdate:"Zehir çay kutusuna karıştırılmış — papatyanın aroması acı tadı gizliyordu." },
+      { l:5, r:5, text:"Canan ve İlhan sadece mesleki değil, duygusal bir ilişki içinde. 8 aydır İlhan'ın atölyesiyle aynı binada yaşıyorlar. Canan'ın motivasyonu sadece para değil.", storyUpdate:"Canan ile İlhan arasındaki ilişki 8 aydır sürüyordu — motivasyonu aşk." },
+      { l:6, r:6, text:"Hasan'a 50.000 TL verilmiş — İlhan'ın hesabından. O gece İlhan'ın kayıkla geldiğini gördü ama 'erken uyudum' dedi. Hasan görgü tanığıydı, İlhan onu satın aldı.", storyUpdate:"Kaptan Hasan, İlhan tarafından 50.000 TL ile susturulmuştu." },
+      { l:7, r:7, text:"Zehir tam öldürücü dozda verilmiş. Kerem'in kalbi sağlamdı, doğal kalp krizi imkânsız. Tespitin zorluğuna güvenilmişti ama toksikoloji her şeyi ortaya çıkardı.", storyUpdate:"Kalp krizi süsü verilmişti ama toksikoloji gerçeği ortaya çıkardı." },
+      { l:8, r:8, text:"Canan, cinayetten 2 hafta önce zehrin otopside tespit edilip edilemeyeceğini araştırmış. Bu ani bir karar değil, soğukkanlı bir hesap.", storyUpdate:"Canan, cinayetten 2 hafta önce zehrin tespit edilip edilemeyeceğini araştırmıştı." },
+      { l:9, r:9, text:"Seranın kapısında sadece Canan ve Mediha'nın izleri var. Mediha serayla her gün ilgileniyor, bu normal. Ama o gece seraya en son Canan girmiş.", storyUpdate:"O gece seraya en son Canan girmiş — Vadinin Zambağı'nın son kontrolü için." }
+    ],
+    wrongs: {
+      "0-4":"Bitkinin kesilmesi ile çay kutusundaki koku aynı zincirin farklı halkaları.",
+      "1-3":"Akademik kayıt ile sulama boşluğu farklı ipuçlarıyla eşleşiyor.",
+      "2-7":"Dozaj hesabı ile kalp sağlığı bilgisi birbirini tamamlıyor ama eşleşmeleri farklı.",
+      "5-6":"Canan-İlhan ilişkisi ile Hasan'ın susturulması farklı kanıt zincirlerinde.",
+      "6-9":"Hasan'ın susturulması ile sera izleri farklı olayları aydınlatıyor.",
+      "8-1":"Araştırma ve laboratuvar yakın zamanlı ama farklı hazırlık aşamalarına ait.",
+      "9-0":"Parmak izleri ile kesilen bitki farklı eşleşmelere ait."
+    },
+    wrongFallback: "Her iki ipucu da zehir izine ait ama farklı bağlantıları ortaya çıkarıyor."
+  },
+  {
+    title: "Bölüm V — Hakikat",
+    story: "Tüm ipuçları bir araya geliyor. Sahtekârlık, ihanet, susma ve cinayet — her şüphelinin rolü son parçalarıyla netleşmek üzere.",
+    left: [
+      "İlhan'ın o gece 21:30'da iskelede görüntülendiği güvenlik kamerası",
+      "İlhan iskeleden atölyeye giden yolda 3 dakika görünmüyor",
+      "İlhan atölyeye girdiğinde Kerem zaten bilinci kapanmıştı",
+      "Yanmış vasiyetname kalıntılarında: \"...tüm koleksiyonu vakfa...\"",
+      "Mediha o gece odasından çıkıp bodruma inmiş",
+      "Zeynep'in o gece bodrum arşivinde olduğuna dair kapı sensörü kaydı",
+      "Doğan'ın İlhan'a son mesajı: \"Temiz mi?\"",
+      "Kerem'in atölyesindeki gizli ses kaydı — aktive edilmiş",
+      "Hasan'ın itirafı: \"İlhan kayıkla geldi. Bana para verdi. Sustum.\"",
+      "Tüm kanıtlar toplanmış, dosya tamamlanmış"
+    ],
+    right: [
+      "İlhan'ın ifadesi: \"O gece İstanbul'da değildim\"",
+      "Bu 3 dakika, seranın arka kapısından girip çıkmaya yeterli",
+      "İlhan'ın eldivenlerinde Kerem'in gözlüğüne ait cam kırığı",
+      "Mevcut vasiyetnamede tek mirasçı: Mediha",
+      "Bodrumdaki kasada Doğan'dan gelen son makbuz: cinayet günü tarihli",
+      "Zeynep bodrumda, Mediha kasada — aynı saatte, farklı bölümlerde",
+      "İlhan'ın yanıtı: \"Kalp krizi. Kimse bir şey anlamayacak.\"",
+      "Kayıtta Kerem'in son sözleri: \"...bunu sana emanet ediyorum, Zeynep\"",
+      "Hasan'ın cebindeki ikinci not: \"Ailene bir şey olmasın istiyorsan sus\"",
+      "Zeynep'in ses kaydını savcılığa teslim ettiği tutanak"
+    ],
+    matches: [
+      { l:0, r:0, text:"Kamera yalan söylemez. İlhan 21:30'da iskeledeydi — mahkemede söylediğinin aksine. Orada olma sebebi bir tekti: Kerem'in öldüğünden emin olmak.", storyUpdate:"İlhan o gece oradaydı. Kamera kaydı yalanını çürütüyor." },
+      { l:1, r:1, text:"İlhan'ın kayıp 3 dakikası — iskeleden atölyeye doğrudan gitmemiş. Seranın arka kapısından girip çıkmış: son koordinasyonu yaptı ya da kanıtları temizledi.", storyUpdate:"İlhan'ın kayıp 3 dakikası serada geçti — son koordinasyon." },
+      { l:2, r:2, text:"İlhan atölyeye geldiğinde Kerem yerde, bilinçsizdi. Sahneyi düzenledi — gözlüğü yerinden aldı, belgeleri kontrol etti. Eldivenindeki cam kırığı, gözlüğe dokunduğunu kanıtlıyor.", storyUpdate:"İlhan sahneyi düzenledi — her şeyi 'kalp krizi' gibi gösterdi." },
+      { l:3, r:3, text:"Kerem vasiyetini değiştiriyordu — koleksiyonu vakfa bırakacaktı. Mevcut vasiyette her şey Mediha'ya kalıyor. İlhan vasiyetnameyi yakarak hem iz sildi hem Mediha'yı şüpheli haline getirdi.", storyUpdate:"İlhan vasiyetnameyi yakarak hem kanıt sildi hem de Mediha'yı çerçeveledi." },
+      { l:4, r:4, text:"Mediha o gece uyumadı — bodruma inip kasayı kontrol etti. Doğan'dan gelen son makbuz cinayet gününe ait. Mediha her şeyi biliyordu ve kanıtları saklamaya çalışıyordu.", storyUpdate:"Mediha o gece kanıtları saklamaya çalışıyordu — bildiği halde sustu." },
+      { l:5, r:5, text:"İkisi de bodruma inmiş ama birbirlerini görmemiş — bodrum iki ayrı bölümden oluşuyor. Zeynep arşivdeki belgeleri alırken, Mediha makbuzları saklıyordu.", storyUpdate:"Zeynep ve Mediha aynı gece bodrumda, habersizce, kendi sırlarını saklıyordu." },
+      { l:6, r:6, text:"Operasyonun son teyidi. Doğan soruyor, İlhan güvence veriyor. Üçlü ortaklığın en net kanıtı: Doğan finans ve motivasyon, İlhan planlama, Canan uygulama.", storyUpdate:"Mesajlaşma, üçlü ortaklığı kesinleştiriyor: Doğan, İlhan ve Canan." },
+      { l:7, r:7, text:"Kerem bir ses kaydı bırakmış — belgelerin gizli yedek planıydı. Son sözlerinde Zeynep'e sesleniyor. Başına bir şey gelebileceğini biliyordu — kızına güveniyordu.", storyUpdate:"Kerem başına gelecekleri hissediyordu — Zeynep'e bir miras bıraktı: gerçeği." },
+      { l:8, r:8, text:"Hasan sadece parayla değil, tehditle de susturulmuş. 30 yıllık hizmetkâr, ailesinin güvenliği için sustu. İlhan, görgü tanıklarını tehdit edecek kadar acımasızdı.", storyUpdate:"Hasan korku ve parayla susturulmuştu — İlhan acımasızdı." },
+      { l:9, r:9, text:"Kerem'in emaneti, sonunda doğru ellere ulaştı. Zeynep, belgeleri satmak yerine savcılığa teslim etti — babasının son isteğini yerine getirdi.", storyUpdate:"Zeynep, babasının emanetini savcılığa teslim etti. Son dokunuş, bir kızın sadakatiydi." }
+    ],
+    wrongs: {
+      "0-2":"Kamera İlhan'ın iskelede olduğunu gösteriyor, cam kırığı ise atölyede yaptıklarını — farklı anlar.",
+      "2-3":"Sahne düzenlemesi ile vasiyetname farklı eylemlere ait.",
+      "4-5":"Mediha'nın bodruma inişi kasayla, Zeynep'in sensör kaydı ise aynı andalıkla eşleşiyor.",
+      "6-8":"Doğan'ın mesajı İlhan'a, tehdit notu Hasan'a — farklı kişilere.",
+      "7-6":"Kerem'in kaydı ile İlhan'ın mesajlaşması farklı kanıt türleri.",
+      "8-9":"Hasan'ın itirafı ile Zeynep'in teslimi farklı sonuçlara yol açıyor.",
+      "9-7":"Dosyanın tamamlanması ile ses kaydı farklı eşleşmelere ait."
+    },
+    wrongFallback: "Bu iki ipucu farklı son parçaları bir araya getiriyor."
+  }
+];
+
+const REVEAL_TEXT = `<p>Kerem Arslantürk'ü öldüren üç kişilik bir zincirdi:</p>
+
+<p><strong>Doğan Kıray</strong> — 15 yıldır sahte tabloları orijinal olarak satan, 40 milyon euro'luk bir koleksiyon üzerine bina edilmiş bir imparatorluğun sahibi. Kerem'in İnterpol'e başvuracağını öğrendiğinde, emri verdi.</p>
+
+<p><strong>İlhan Soylu</strong> — Kerem'in eski öğrencisi, sahte tabloların yaratıcısı. Canan'ı yönlendirdi, dozajı hesaplattı, o gece yalıya gizlice gelip sahneyi 'kalp krizi' olarak düzenledi. Egosunu monogramıyla tabloların arkasına gizledi — bu, sonu oldu.</p>
+
+<p><strong>Canan Demirtaş</strong> — İlhan'ın sevgilisi, Kerem'in asistanı. Seradaki Vadinin Zambağı'ndan konvallatoksin özütü hazırladı, papatya çayına karıştırdı. Bilimsel bilgisini ölüm için kullandı.</p>
+
+<p>Mediha yıllardır biliyordu ama sustu — Doğan'ın paraları yalının bakımını karşılıyordu. Kaptan Hasan, tehditle susturuldu. Zeynep başlangıçta belgeleri kendi çıkarı için kullanmayı düşündü — ama sonunda babasının emanetini savcılığa teslim etti.</p>
+
+<p>Kerem, ölümünden önce bir ses kaydı bırakmıştı. Son sözleri kızınaydı:</p>
+
+<p><strong>"Bunu sana emanet ediyorum, Zeynep."</strong></p>
+
+<p>Ve Zeynep, son dokunuşu yaptı.</p>`;
+
+// ═══════ STATE ═══════
+const S = {
+  scene: 0,
+  selLeft: null,
+  solved: [[], [], [], [], []],
+  animating: false,
+  rightOrder: [],
+  storyUpdates: [[], [], [], [], []]
+};
+
+const $ = id => document.getElementById(id);
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $('screen-' + name).classList.add('active');
+}
+
+function startGame() {
+  S.scene = 0;
+  S.selLeft = null;
+  S.solved = [[], [], [], [], []];
+  S.storyUpdates = [[], [], [], [], []];
+  S.rightOrder = [];
+  for (let i = 0; i < 5; i++) S.rightOrder.push(shuffle([0,1,2,3,4,5,6,7,8,9]));
+  showScreen('game');
+  renderScene();
+  animateStory();
+}
+
+function renderScene() {
+  const sc = SCENES[S.scene];
+  $('scene-label').textContent = sc.title;
+  renderClues();
+  renderProgress();
+  renderStoryUpdates();
+}
+
+function animateStory() {
+  const sc = SCENES[S.scene];
+  const el = $('story-text');
+  const sentences = sc.story.split('. ').map((s, i, a) => i < a.length - 1 ? s + '.' : s);
+  el.innerHTML = sentences.map(s => `<span class="line">${s} </span>`).join('');
+  $('story-updates').innerHTML = '';
+  const lines = el.querySelectorAll('.line');
+  lines.forEach((l, i) => setTimeout(() => l.classList.add('visible'), 120 * (i + 1)));
+}
+
+function renderStoryUpdates() {
+  const container = $('story-updates');
+  container.innerHTML = '';
+  S.storyUpdates[S.scene].forEach(text => {
+    const div = document.createElement('div');
+    div.className = 'story-update visible';
+    div.textContent = '— ' + text;
+    container.appendChild(div);
+  });
+}
+
+function addStoryUpdate(text) {
+  S.storyUpdates[S.scene].push(text);
+  const container = $('story-updates');
+  const div = document.createElement('div');
+  div.className = 'story-update';
+  div.textContent = '— ' + text;
+  container.appendChild(div);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => div.classList.add('visible'));
+  });
+  // Auto scroll story panel
+  const panel = $('story-panel');
+  setTimeout(() => panel.scrollTo({ top: panel.scrollHeight, behavior: 'smooth' }), 100);
+}
+
+function renderClues() {
+  const sc = SCENES[S.scene];
+  const solved = S.solved[S.scene];
+  renderCol('col-left', sc.left, 'left', [...Array(10).keys()], solved);
+  renderCol('col-right', sc.right, 'right', S.rightOrder[S.scene], solved);
+}
+
+function renderCol(colId, items, side, order, solved) {
+  const col = $(colId);
+  col.innerHTML = '';
+  order.forEach(idx => {
+    const isSolved = solved.some(m => (side === 'left' ? m.l : m.r) === idx);
+    if (isSolved) return; // Don't render solved clues at all
+    const btn = document.createElement('button');
+    btn.className = 'clue';
+    btn.dataset.side = side;
+    btn.dataset.index = idx;
+    if (side === 'left' && S.selLeft === idx) btn.classList.add('selected');
+    btn.textContent = items[idx];
+    col.appendChild(btn);
+  });
+}
+
+function renderProgress() {
+  const bar = $('progress-bar');
+  bar.innerHTML = '';
+  // Chapter number
+  const ch = document.createElement('span');
+  ch.className = 'progress-chapter';
+  const romans = ['I', 'II', 'III', 'IV', 'V'];
+  ch.textContent = romans[S.scene];
+  bar.appendChild(ch);
+  // Pips for current scene
+  for (let i = 0; i < 10; i++) {
+    const pip = document.createElement('span');
+    pip.className = 'progress-pip';
+    if (i < S.solved[S.scene].length) pip.classList.add('filled');
+    bar.appendChild(pip);
+  }
+}
+
+function showDeduction(text, type) {
+  const box = $('deduction-box');
+  box.className = 'deduction-box ' + type;
+  box.textContent = text;
+  $('deduction-panel').classList.add('show');
+}
+
+function hideDeduction() {
+  $('deduction-panel').classList.remove('show');
+}
+
+function vibrate(p) {
+  try { if (navigator.vibrate) navigator.vibrate(p); } catch(e) {}
+}
+
+function handleTap(side, index) {
+  if (S.animating) return;
+  const sc = SCENES[S.scene];
+  const solved = S.solved[S.scene];
+  const isSolved = solved.some(m => (side === 'left' ? m.l : m.r) === index);
+  if (isSolved) return;
+
+  if (side === 'left') {
+    S.selLeft = (S.selLeft === index) ? null : index;
+    hideDeduction();
+    renderClues();
+    return;
+  }
+
+  if (S.selLeft === null) return;
+
+  const li = S.selLeft;
+  const match = sc.matches.find(m => m.l === li && m.r === index);
+
+  if (match) {
+    S.animating = true;
+    S.selLeft = null;
+    vibrate(10);
+
+    // Glow
+    const lc = document.querySelector(`.clue[data-side="left"][data-index="${li}"]`);
+    const rc = document.querySelector(`.clue[data-side="right"][data-index="${index}"]`);
+    if (lc) { lc.classList.remove('selected'); lc.classList.add('matched'); }
+    if (rc) rc.classList.add('matched');
+
+    // Show deduction
+    setTimeout(() => showDeduction(match.text, 'correct'), 600);
+
+    // Add story update, collapse cards, re-render
+    setTimeout(() => {
+      S.solved[S.scene].push({ l: li, r: index });
+      addStoryUpdate(match.storyUpdate);
+      hideDeduction();
+
+      // Collapse animation
+      if (lc) lc.classList.add('collapsing');
+      if (rc) rc.classList.add('collapsing');
+
+      setTimeout(() => {
+        renderClues();
+        renderProgress();
+        S.animating = false;
+
+        if (S.solved[S.scene].length === 10) {
+          onSceneComplete();
         }
-      },
-      {
-        title: "Sahne 2 — Ada'nın Çalışma Odası",
-        story: "Çalışma odasında Ada'nın geçmişine dair ipuçları var. Masada dağınık belgeler, duvarda eski aile fotoğrafları asılı.",
-        left: [
-          "Avukata yazılmış vasiyetname taslağı",
-          "Boya lekeli erkek gömleği",
-          "Ada'nın telefonundaki son arama"
-        ],
-        right: [
-          "\"Mirası değiştiriyorum\" notu",
-          "Kardeşi Emre'nin resim eğitimi",
-          "Son arama: Emre, gece 23:47"
-        ],
-        matches: [
-          { l: 0, r: 0, text: "Ada vasiyetini değiştirmek üzereydi. Birisi bunu engellemek istedi." },
-          { l: 1, r: 1, text: "Gömlek Emre'nin. O gece atölyedeydi ve tabloya kendi imzasını attı." },
-          { l: 2, r: 2, text: "Ada ölmeden önce Emre'yi aramış. Emre villaya geldi… ve bir daha ayrılmadı." }
-        ],
-        wrongs: {
-          "0-1": "Vasiyetname ile resim eğitimi arasında doğrudan bir ilişki yok.",
-          "0-2": "Vasiyetname taslağı ile telefon araması farklı kanıtlara işaret ediyor.",
-          "1-0": "Gömlek ile miras notu arasında bağlantı kurulamıyor.",
-          "1-2": "Boya lekeli gömlek ile telefon araması farklı ipuçları.",
-          "2-0": "Son arama ile vasiyetname değişikliği doğrudan bağlanamıyor.",
-          "2-1": "Telefon araması ile resim eğitimi arasında bir örüntü yok."
-        }
-      }
-    ];
+      }, 500);
+    }, 2800);
+  } else {
+    S.animating = true;
+    const key = `${li}-${index}`;
+    const explanation = sc.wrongs[key] || sc.wrongFallback;
+    vibrate([30, 50, 30]);
 
-    const REVEAL_TEXT = 'Tüm kanıtlar bir kişiyi işaret ediyor: Ada\'nın kardeşi <strong>Emre Serin</strong>. Mirası almak ve Ada\'nın son tablosunu kendi eseri olarak sahiplenmek için onu zehirledi. Yakılan mektup, vasiyetin değişeceğinin kanıtıydı. Emre o gece villaya geldi, Ada ile son bir kadeh şarap içti — ve o kadehi zehirledi.';
+    const lc = document.querySelector(`.clue[data-side="left"][data-index="${li}"]`);
+    const rc = document.querySelector(`.clue[data-side="right"][data-index="${index}"]`);
+    if (lc) { lc.classList.add('shake'); lc.classList.add('wrong-flash'); }
+    if (rc) { rc.classList.add('shake'); rc.classList.add('wrong-flash'); }
 
-    const STATE = {
-      currentScreen: 'title',
-      currentScene: 0,
-      selectedLeft: null,
-      solvedMatches: [[], []],
-      isAnimating: false,
-      rightOrder: [[], []]
-    };
+    showDeduction(explanation, 'wrong');
 
-    function $(id) { return document.getElementById(id); }
+    setTimeout(() => {
+      if (lc) { lc.classList.remove('shake'); lc.classList.remove('wrong-flash'); }
+      if (rc) { rc.classList.remove('shake'); rc.classList.remove('wrong-flash'); }
+      hideDeduction();
+      S.selLeft = null;
+      S.animating = false;
+      renderClues();
+    }, 1600);
+  }
+}
 
-    function shuffleArray(arr) {
-      const a = [...arr];
-      for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-      }
-      return a;
+function onSceneComplete() {
+  if (S.scene < 4) {
+    setTimeout(() => {
+      const fade = $('scene-fade');
+      const title = $('chapter-title-text');
+      fade.classList.add('active');
+
+      setTimeout(() => {
+        title.textContent = SCENES[S.scene + 1].title;
+        fade.classList.add('show-title');
+      }, 800);
+
+      setTimeout(() => {
+        fade.classList.remove('show-title');
+      }, 2400);
+
+      setTimeout(() => {
+        S.scene++;
+        S.selLeft = null;
+        renderScene();
+        fade.classList.remove('active');
+        animateStory();
+      }, 3000);
+    }, 800);
+  } else {
+    setTimeout(() => {
+      showScreen('reveal');
+      setTimeout(() => typeReveal(), 1200);
+    }, 1000);
+  }
+}
+
+function typeReveal() {
+  const el = $('reveal-text');
+  el.innerHTML = '';
+  const chars = REVEAL_TEXT.split('');
+  let i = 0, inTag = false, buf = '';
+
+  function tick() {
+    if (i >= chars.length) {
+      el.innerHTML = buf;
+      setTimeout(() => $('btn-replay').classList.add('show'), 800);
+      return;
     }
-
-    function showScreen(name) {
-      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-      $('screen-' + name).classList.add('active');
-      STATE.currentScreen = name;
-    }
-
-    function startGame() {
-      STATE.currentScene = 0;
-      STATE.selectedLeft = null;
-      STATE.solvedMatches = [[], []];
-      STATE.rightOrder = [shuffleArray([0, 1, 2]), shuffleArray([0, 1, 2])];
-      showScreen('game');
-      renderGame();
-      animateStoryText();
-    }
-
-    function renderGame() {
-      const scene = SCENES[STATE.currentScene];
-      $('scene-label').textContent = scene.title;
-
-      renderColumn('col-left', scene.left, 'left');
-      renderColumn('col-right', scene.right, 'right');
-      renderProgress();
-    }
-
-    function animateStoryText() {
-      const scene = SCENES[STATE.currentScene];
-      const el = $('story-text');
-      const sentences = scene.story.split('. ').map((s, i, arr) =>
-        i < arr.length - 1 ? s + '.' : s
-      );
-      el.innerHTML = sentences.map(s => `<span class="line">${s} </span>`).join('');
-      const lines = el.querySelectorAll('.line');
-      lines.forEach((line, i) => {
-        setTimeout(() => line.classList.add('visible'), 150 * (i + 1));
-      });
-    }
-
-    function renderColumn(colId, items, side) {
-      const col = $(colId);
-      const solved = STATE.solvedMatches[STATE.currentScene];
-      col.innerHTML = '';
-
-      const order = (side === 'right')
-        ? STATE.rightOrder[STATE.currentScene]
-        : [0, 1, 2];
-
-      order.forEach((logicalIdx) => {
-        const text = items[logicalIdx];
-        const btn = document.createElement('button');
-        btn.className = 'clue';
-        btn.dataset.side = side;
-        btn.dataset.index = logicalIdx;
-
-        const isSolved = solved.some(m => (side === 'left' ? m.l : m.r) === logicalIdx);
-        if (isSolved) btn.classList.add('solved');
-        if (side === 'left' && STATE.selectedLeft === logicalIdx && !isSolved) btn.classList.add('selected');
-
-        btn.textContent = text;
-        col.appendChild(btn);
-      });
-    }
-
-    function renderProgress() {
-      const bar = $('progress-bar');
-      bar.innerHTML = '';
-      for (let s = 0; s < 2; s++) {
-        for (let i = 0; i < 3; i++) {
-          const dot = document.createElement('span');
-          dot.className = 'progress-dot';
-          if (STATE.solvedMatches[s].length > i) dot.classList.add('filled');
-          bar.appendChild(dot);
-        }
-        if (s === 0) {
-          const div = document.createElement('span');
-          div.className = 'progress-divider';
-          bar.appendChild(div);
-        }
-      }
-    }
-
-    function showDeduction(text, type) {
-      const box = $('deduction-box');
-      box.className = 'deduction-box ' + type;
-      box.textContent = text;
-      $('deduction-panel').classList.add('show');
-    }
-
-    function hideDeduction() {
-      $('deduction-panel').classList.remove('show');
-    }
-
-    function vibrate(pattern) {
-      try { if (navigator.vibrate) navigator.vibrate(pattern); } catch(e) {}
-    }
-
-    function handleClueTap(side, index) {
-      if (STATE.isAnimating) return;
-
-      const scene = SCENES[STATE.currentScene];
-      const solved = STATE.solvedMatches[STATE.currentScene];
-      const isSolved = solved.some(m => (side === 'left' ? m.l : m.r) === index);
-      if (isSolved) return;
-
-      if (side === 'left') {
-        STATE.selectedLeft = (STATE.selectedLeft === index) ? null : index;
-        hideDeduction();
-        renderGame();
-        return;
-      }
-
-      if (STATE.selectedLeft === null) return;
-
-      const leftIdx = STATE.selectedLeft;
-      const match = scene.matches.find(m => m.l === leftIdx && m.r === index);
-
-      if (match) {
-        STATE.isAnimating = true;
-        STATE.selectedLeft = null;
-        vibrate(10);
-
-        // "Realization" glow on both cards
-        const leftClue = document.querySelector(`.clue[data-side="left"][data-index="${leftIdx}"]`);
-        const rightClue = document.querySelector(`.clue[data-side="right"][data-index="${index}"]`);
-        if (leftClue) { leftClue.classList.remove('selected'); leftClue.classList.add('matched'); }
-        if (rightClue) rightClue.classList.add('matched');
-
-        // After glow, show deduction as inner monologue
-        setTimeout(() => {
-          showDeduction(match.text, 'correct');
-        }, 800);
-
-        // After deduction, transition to solved
-        setTimeout(() => {
-          STATE.solvedMatches[STATE.currentScene].push({ l: leftIdx, r: index });
-          hideDeduction();
-          renderGame();
-          STATE.isAnimating = false;
-
-          if (STATE.solvedMatches[STATE.currentScene].length === 3) {
-            onSceneComplete();
-          }
-        }, 3200);
-      } else {
-        STATE.isAnimating = true;
-        const key = `${leftIdx}-${index}`;
-        const explanation = scene.wrongs[key] || "Bu ipuçları birbiriyle bağlantılı değil.";
-        vibrate([30, 50, 30]);
-
-        const leftClue = document.querySelector(`.clue[data-side="left"][data-index="${leftIdx}"]`);
-        const rightClue = document.querySelector(`.clue[data-side="right"][data-index="${index}"]`);
-        if (leftClue) { leftClue.classList.add('shake'); leftClue.classList.add('wrong'); }
-        if (rightClue) { rightClue.classList.add('shake'); rightClue.classList.add('wrong'); }
-
-        showDeduction(explanation, 'wrong');
-
-        setTimeout(() => {
-          if (leftClue) { leftClue.classList.remove('shake'); leftClue.classList.remove('wrong'); }
-          if (rightClue) { rightClue.classList.remove('shake'); rightClue.classList.remove('wrong'); }
-          hideDeduction();
-          STATE.selectedLeft = null;
-          STATE.isAnimating = false;
-          renderGame();
-        }, 1800);
-      }
-    }
-
-    function onSceneComplete() {
-      if (STATE.currentScene === 0) {
-        setTimeout(() => {
-          // Cinematic fade to black
-          $('scene-fade').classList.add('active');
-
-          setTimeout(() => {
-            STATE.currentScene = 1;
-            STATE.selectedLeft = null;
-            renderGame();
-
-            setTimeout(() => {
-              $('scene-fade').classList.remove('active');
-              animateStoryText();
-            }, 300);
-          }, 1200);
-        }, 600);
-      } else {
-        setTimeout(() => {
-          showScreen('reveal');
-          setTimeout(() => typewriterReveal(), 1500);
-        }, 1000);
-      }
-    }
-
-    function typewriterReveal() {
-      const el = $('reveal-text');
-      el.innerHTML = '';
-      const chars = REVEAL_TEXT.split('');
-      let i = 0;
-      let inTag = false;
-      let buffer = '';
-
-      function tick() {
-        if (i >= chars.length) {
-          el.innerHTML = buffer;
-          setTimeout(() => $('btn-replay').classList.add('show'), 600);
-          return;
-        }
-        const ch = chars[i];
-        if (ch === '<') inTag = true;
-        if (inTag) {
-          buffer += ch;
-          if (ch === '>') {
-            inTag = false;
-            el.innerHTML = buffer;
-          }
-          i++;
-          tick();
-          return;
-        }
-        buffer += ch;
-        el.innerHTML = buffer;
-        i++;
-        setTimeout(tick, 35);
-      }
+    const c = chars[i];
+    if (c === '<') inTag = true;
+    if (inTag) {
+      buf += c;
+      if (c === '>') { inTag = false; el.innerHTML = buf; }
+      i++;
       tick();
+      return;
     }
+    buf += c;
+    el.innerHTML = buf;
+    i++;
+    setTimeout(tick, 22);
+  }
+  tick();
+}
 
-    function resetGame() {
-      $('btn-replay').classList.remove('show');
-      $('reveal-text').innerHTML = '';
-      showScreen('title');
-    }
+function resetGame() {
+  $('btn-replay').classList.remove('show');
+  $('reveal-text').innerHTML = '';
+  showScreen('title');
+}
 
-    // Event delegation
-    $('clues-panel').addEventListener('click', (e) => {
-      const clue = e.target.closest('.clue');
-      if (!clue) return;
-      handleClueTap(clue.dataset.side, parseInt(clue.dataset.index));
-    });
-  </script>
+// Event delegation
+$('clues-panel').addEventListener('click', e => {
+  const clue = e.target.closest('.clue');
+  if (!clue) return;
+  handleTap(clue.dataset.side, parseInt(clue.dataset.index));
+});
+</script>
+
 </body>
 </html>
