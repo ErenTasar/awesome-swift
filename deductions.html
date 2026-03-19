@@ -33,6 +33,12 @@
       font-family: var(--font-sans);
       -webkit-font-smoothing: antialiased;
       overscroll-behavior: none;
+      animation: breathe 8s ease-in-out infinite;
+    }
+
+    @keyframes breathe {
+      0%, 100% { background-color: #0a0a0f; }
+      50% { background-color: #0b0a12; }
     }
 
     #app {
@@ -46,6 +52,28 @@
       padding-bottom: env(safe-area-inset-bottom);
     }
 
+    /* Film grain */
+    #app::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      pointer-events: none;
+      opacity: 0.04;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 128px 128px;
+    }
+
+    /* Vignette */
+    #app::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 99;
+      pointer-events: none;
+      background: radial-gradient(ellipse at 50% 50%, transparent 50%, rgba(0, 0, 0, 0.45) 100%);
+    }
+
     /* --- Screens --- */
     .screen { display: none; flex-direction: column; height: 100%; }
     .screen.active { display: flex; }
@@ -56,7 +84,7 @@
       align-items: center;
       text-align: center;
       padding: 2rem;
-      animation: fadeIn 1s ease;
+      animation: fadeIn 1.5s ease;
       background: radial-gradient(ellipse at 50% 40%, #1a1a2e 0%, var(--bg-deep) 70%);
     }
     #screen-title .eyebrow {
@@ -80,21 +108,7 @@
       font-style: italic;
       font-size: 1rem;
       color: var(--text-secondary);
-      margin-bottom: 2.5rem;
-    }
-    #screen-title .divider {
-      width: 40px;
-      height: 1px;
-      background: var(--accent-gold);
-      opacity: 0.4;
-      margin: 1rem auto 1.2rem;
-      border: none;
-    }
-    #screen-title .version {
-      font-size: 0.6rem;
-      color: var(--text-muted);
-      letter-spacing: 0.15em;
-      margin-top: 1.5rem;
+      margin-bottom: 3rem;
     }
     .btn-primary {
       font-family: var(--font-sans);
@@ -114,12 +128,10 @@
     .btn-primary:active { opacity: 0.8; transform: scale(0.97); }
 
     /* --- Game Screen --- */
-    #screen-game { padding: 0; }
-    #screen-game.fading { opacity: 0; transition: opacity 0.4s ease; }
-    #screen-game.visible { opacity: 1; transition: opacity 0.4s ease; }
+    #screen-game { padding: 0; position: relative; }
 
     #story-panel {
-      padding: 1.5rem 1.25rem 0.85rem;
+      padding: 1.5rem 1.25rem 1rem;
       flex-shrink: 0;
       border-bottom: 1px solid var(--border);
     }
@@ -137,7 +149,16 @@
       font-size: 1rem;
       line-height: 1.75;
       color: var(--text-primary);
-      animation: fadeIn 0.6s ease;
+    }
+    .story-text .line {
+      display: block;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .story-text .line.visible {
+      opacity: 1;
+      transform: translateY(0);
     }
 
     /* --- Deduction Panel --- */
@@ -152,39 +173,26 @@
       padding: 0.75rem 1.25rem;
     }
     .deduction-box {
-      padding: 0.85rem 1rem;
-      border-radius: 6px;
-      font-size: 0.88rem;
-      font-style: italic;
+      padding: 0.75rem 1rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
       line-height: 1.6;
-      animation: slideUp 0.4s ease;
     }
     .deduction-box.correct {
-      background: var(--accent-gold-dim);
-      border-left: 3px solid var(--accent-gold);
-      color: var(--text-primary);
+      background: transparent;
+      border-left: 2px solid var(--accent-gold);
+      color: var(--text-secondary);
+      font-family: var(--font-serif);
+      font-style: italic;
+      animation: thoughtAppear 0.8s ease forwards;
     }
     .deduction-box.wrong {
       background: var(--accent-red-dim);
-      border-left: 3px solid var(--accent-red);
+      border-left: 2px solid var(--accent-red);
       color: var(--text-secondary);
-    }
-
-    /* --- Hint Text --- */
-    #hint-text {
-      font-size: 0.7rem;
-      color: var(--text-muted);
-      text-align: center;
-      padding: 0.6rem 1rem 0.1rem;
-      letter-spacing: 0.03em;
-      transition: opacity 0.3s ease;
-      flex-shrink: 0;
-    }
-    #hint-text.highlight {
-      color: var(--accent-gold);
-    }
-    #hint-text.hidden {
-      opacity: 0;
+      font-family: var(--font-serif);
+      font-style: italic;
+      animation: thoughtAppear 0.6s ease forwards;
     }
 
     /* --- Clues Panel --- */
@@ -193,21 +201,20 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 0.65rem;
-      padding: 0.5rem 1rem 0.75rem;
-      align-content: start;
+      padding: 0.75rem 1rem;
       overflow-y: auto;
     }
-    .clue-column { display: flex; flex-direction: column; gap: 0.65rem; }
-    .col-header {
-      font-size: 0.6rem;
-      font-weight: 600;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      padding: 0 0.2rem 0.2rem;
+    .clue-column {
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      min-height: 0;
     }
 
     .clue {
+      flex: 1;
+      display: flex;
+      align-items: center;
       font-family: var(--font-sans);
       font-size: 0.82rem;
       line-height: 1.5;
@@ -218,7 +225,9 @@
       padding: 0.8rem 0.9rem;
       cursor: pointer;
       text-align: left;
-      transition: border-color 0.3s, background-color 0.3s, transform 0.15s, opacity 0.5s;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.15);
+      transition: border-color 0.3s, background-color 0.3s, transform 0.3s ease,
+                  opacity 0.5s, box-shadow 0.3s ease, filter 0.3s ease;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
     }
@@ -227,30 +236,26 @@
     .clue.selected {
       border-color: var(--border-active);
       background: var(--accent-gold-dim);
-      animation: pulse 1.5s ease-in-out infinite;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 20px rgba(201, 168, 76, 0.08);
+    }
+    .clue.matched {
+      border-color: var(--accent-gold);
+      box-shadow: 0 0 15px rgba(201, 168, 76, 0.3), 0 0 30px rgba(201, 168, 76, 0.1);
+      background: rgba(201, 168, 76, 0.1);
+      transition: all 0.4s ease;
     }
     .clue.solved {
-      opacity: 0.3;
+      opacity: 0.2;
       pointer-events: none;
-      border-color: var(--border);
-      background: var(--bg-surface);
-      text-decoration: line-through;
-      text-decoration-color: var(--text-muted);
+      transform: scale(0.97);
+      box-shadow: none;
     }
-    .clue.solved .solved-check {
-      display: inline;
-    }
-    .solved-check {
-      display: none;
-      color: var(--accent-gold);
-      font-size: 0.7rem;
-      margin-right: 0.3rem;
+    .clue.wrong {
+      filter: brightness(0.6) saturate(0.5);
     }
     .clue.shake {
       animation: shakeX 0.4s ease;
-    }
-    .clue.flash {
-      animation: flashBorder 0.5s ease;
     }
 
     /* --- Progress --- */
@@ -259,69 +264,38 @@
       justify-content: center;
       align-items: center;
       gap: 0.5rem;
-      padding: 0.75rem 1rem;
+      padding: 0.85rem 1rem;
       flex-shrink: 0;
     }
-    .progress-group {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.3rem;
-    }
-    .progress-dots {
-      display: flex;
-      gap: 0.4rem;
-    }
-    .progress-label {
-      font-size: 0.5rem;
-      color: var(--text-muted);
-      letter-spacing: 0.1em;
-    }
     .progress-dot {
-      width: 10px; height: 10px;
+      width: 8px; height: 8px;
       border-radius: 50%;
       background: var(--border);
       transition: background 0.4s ease, box-shadow 0.4s ease;
     }
     .progress-dot.filled {
       background: var(--accent-gold);
-      box-shadow: 0 0 6px rgba(201, 168, 76, 0.5);
+      box-shadow: 0 0 6px rgba(201, 168, 76, 0.4);
     }
     .progress-divider {
-      width: 1px; height: 20px;
+      width: 1px; height: 14px;
       background: var(--border);
-      margin: 0 0.4rem;
-      align-self: center;
+      margin: 0 0.25rem;
     }
 
-    /* --- Scene Overlay --- */
-    #scene-overlay {
+    /* --- Scene Fade --- */
+    #scene-fade {
       position: absolute;
       inset: 0;
-      background: var(--bg-deep);
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      text-align: center;
+      background: #000;
       z-index: 10;
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.5s ease;
+      transition: opacity 1s ease;
     }
-    #scene-overlay.show {
+    #scene-fade.active {
       opacity: 1;
       pointer-events: auto;
-    }
-    #scene-overlay .overlay-title {
-      font-family: var(--font-serif);
-      font-size: 1.4rem;
-      color: var(--accent-gold);
-      margin-bottom: 0.5rem;
-    }
-    #scene-overlay .overlay-sub {
-      font-size: 0.8rem;
-      color: var(--text-muted);
     }
 
     /* --- Reveal Screen --- */
@@ -341,7 +315,8 @@
       text-transform: uppercase;
       color: var(--accent-gold);
       margin-bottom: 1.5rem;
-      animation: fadeIn 1s ease;
+      opacity: 0;
+      animation: fadeIn 1s ease 0.3s forwards;
     }
     #reveal-text {
       font-family: var(--font-serif);
@@ -361,10 +336,9 @@
 
     /* --- Animations --- */
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.015); }
+    @keyframes thoughtAppear {
+      0% { opacity: 0; transform: translateY(4px); }
+      100% { opacity: 1; transform: translateY(0); }
     }
     @keyframes shakeX {
       0%, 100% { transform: translateX(0); }
@@ -372,10 +346,6 @@
       40% { transform: translateX(4px); }
       60% { transform: translateX(-3px); }
       80% { transform: translateX(3px); }
-    }
-    @keyframes flashBorder {
-      0%, 100% { border-color: var(--border); }
-      50% { border-color: var(--text-muted); }
     }
     @keyframes revealBg {
       from { background: #000; }
@@ -389,31 +359,25 @@
     <div id="screen-title" class="screen active">
       <div class="eyebrow">Deductions</div>
       <h1>Son Dokunuş</h1>
-      <hr class="divider">
       <p class="subtitle">Bir ressam, bir villa, bir kış gecesi.</p>
       <button class="btn-primary" onclick="startGame()">Soruşturmaya Başla</button>
-      <div class="version">v0.1 — demo</div>
     </div>
 
     <!-- Game -->
     <div id="screen-game" class="screen">
       <div id="story-panel">
         <div class="scene-label" id="scene-label"></div>
-        <p class="story-text" id="story-text"></p>
+        <div class="story-text" id="story-text"></div>
       </div>
       <div id="deduction-panel">
         <div class="deduction-box" id="deduction-box"></div>
       </div>
-      <div id="hint-text">Bir kanıt seç, sonra eşleşen ipucuna dokun</div>
       <div id="clues-panel">
         <div class="clue-column" id="col-left"></div>
         <div class="clue-column" id="col-right"></div>
       </div>
       <div id="progress-bar"></div>
-      <div id="scene-overlay">
-        <div class="overlay-title" id="overlay-title"></div>
-        <div class="overlay-sub" id="overlay-sub"></div>
-      </div>
+      <div id="scene-fade"></div>
     </div>
 
     <!-- Reveal -->
@@ -489,10 +453,20 @@
       currentScene: 0,
       selectedLeft: null,
       solvedMatches: [[], []],
-      isAnimating: false
+      isAnimating: false,
+      rightOrder: [[], []]
     };
 
     function $(id) { return document.getElementById(id); }
+
+    function shuffleArray(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
 
     function showScreen(name) {
       document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -504,23 +478,32 @@
       STATE.currentScene = 0;
       STATE.selectedLeft = null;
       STATE.solvedMatches = [[], []];
+      STATE.rightOrder = [shuffleArray([0, 1, 2]), shuffleArray([0, 1, 2])];
       showScreen('game');
-      $('screen-game').classList.remove('fading');
-      $('screen-game').classList.add('visible');
       renderGame();
+      animateStoryText();
     }
 
     function renderGame() {
       const scene = SCENES[STATE.currentScene];
       $('scene-label').textContent = scene.title;
-      $('story-text').textContent = scene.story;
 
-      // Render clues
       renderColumn('col-left', scene.left, 'left');
       renderColumn('col-right', scene.right, 'right');
-
       renderProgress();
-      updateHint();
+    }
+
+    function animateStoryText() {
+      const scene = SCENES[STATE.currentScene];
+      const el = $('story-text');
+      const sentences = scene.story.split('. ').map((s, i, arr) =>
+        i < arr.length - 1 ? s + '.' : s
+      );
+      el.innerHTML = sentences.map(s => `<span class="line">${s} </span>`).join('');
+      const lines = el.querySelectorAll('.line');
+      lines.forEach((line, i) => {
+        setTimeout(() => line.classList.add('visible'), 150 * (i + 1));
+      });
     }
 
     function renderColumn(colId, items, side) {
@@ -528,22 +511,22 @@
       const solved = STATE.solvedMatches[STATE.currentScene];
       col.innerHTML = '';
 
-      const header = document.createElement('div');
-      header.className = 'col-header';
-      header.textContent = side === 'left' ? 'KANITLAR' : 'İPUÇLARI';
-      col.appendChild(header);
+      const order = (side === 'right')
+        ? STATE.rightOrder[STATE.currentScene]
+        : [0, 1, 2];
 
-      items.forEach((text, i) => {
+      order.forEach((logicalIdx) => {
+        const text = items[logicalIdx];
         const btn = document.createElement('button');
         btn.className = 'clue';
         btn.dataset.side = side;
-        btn.dataset.index = i;
+        btn.dataset.index = logicalIdx;
 
-        const isSolved = solved.some(m => (side === 'left' ? m.l : m.r) === i);
+        const isSolved = solved.some(m => (side === 'left' ? m.l : m.r) === logicalIdx);
         if (isSolved) btn.classList.add('solved');
-        if (side === 'left' && STATE.selectedLeft === i && !isSolved) btn.classList.add('selected');
+        if (side === 'left' && STATE.selectedLeft === logicalIdx && !isSolved) btn.classList.add('selected');
 
-        btn.innerHTML = `<span class="solved-check">✓</span>${text}`;
+        btn.textContent = text;
         col.appendChild(btn);
       });
     }
@@ -551,46 +534,18 @@
     function renderProgress() {
       const bar = $('progress-bar');
       bar.innerHTML = '';
-      const labels = ['I', 'II'];
       for (let s = 0; s < 2; s++) {
-        const group = document.createElement('div');
-        group.className = 'progress-group';
-        const dotsRow = document.createElement('div');
-        dotsRow.className = 'progress-dots';
         for (let i = 0; i < 3; i++) {
           const dot = document.createElement('span');
           dot.className = 'progress-dot';
           if (STATE.solvedMatches[s].length > i) dot.classList.add('filled');
-          dotsRow.appendChild(dot);
+          bar.appendChild(dot);
         }
-        group.appendChild(dotsRow);
-        const label = document.createElement('div');
-        label.className = 'progress-label';
-        label.textContent = labels[s];
-        group.appendChild(label);
-        bar.appendChild(group);
         if (s === 0) {
           const div = document.createElement('span');
           div.className = 'progress-divider';
           bar.appendChild(div);
         }
-      }
-    }
-
-    function updateHint() {
-      const hint = $('hint-text');
-      const solved = STATE.solvedMatches[STATE.currentScene];
-      if (solved.length === 3) {
-        hint.classList.add('hidden');
-        return;
-      }
-      hint.classList.remove('hidden');
-      if (STATE.selectedLeft !== null) {
-        hint.textContent = 'Şimdi eşleşen ipucunu seç →';
-        hint.classList.add('highlight');
-      } else {
-        hint.textContent = 'Bir kanıt seç, sonra eşleşen ipucuna dokun';
-        hint.classList.remove('highlight');
       }
     }
 
@@ -624,53 +579,54 @@
         return;
       }
 
-      // Right side tap — no left selected? flash feedback
-      if (STATE.selectedLeft === null) {
-        const rightClue = document.querySelector(`.clue[data-side="right"][data-index="${index}"]`);
-        if (rightClue) {
-          rightClue.classList.add('flash');
-          setTimeout(() => rightClue.classList.remove('flash'), 500);
-        }
-        return;
-      }
+      if (STATE.selectedLeft === null) return;
 
       const leftIdx = STATE.selectedLeft;
       const match = scene.matches.find(m => m.l === leftIdx && m.r === index);
 
       if (match) {
-        // Correct
         STATE.isAnimating = true;
-        STATE.solvedMatches[STATE.currentScene].push({ l: leftIdx, r: index });
         STATE.selectedLeft = null;
         vibrate(10);
-        showDeduction(match.text, 'correct');
-        renderGame();
 
+        // "Realization" glow on both cards
+        const leftClue = document.querySelector(`.clue[data-side="left"][data-index="${leftIdx}"]`);
+        const rightClue = document.querySelector(`.clue[data-side="right"][data-index="${index}"]`);
+        if (leftClue) { leftClue.classList.remove('selected'); leftClue.classList.add('matched'); }
+        if (rightClue) rightClue.classList.add('matched');
+
+        // After glow, show deduction as inner monologue
         setTimeout(() => {
+          showDeduction(match.text, 'correct');
+        }, 800);
+
+        // After deduction, transition to solved
+        setTimeout(() => {
+          STATE.solvedMatches[STATE.currentScene].push({ l: leftIdx, r: index });
           hideDeduction();
+          renderGame();
           STATE.isAnimating = false;
+
           if (STATE.solvedMatches[STATE.currentScene].length === 3) {
             onSceneComplete();
           }
-        }, 2800);
+        }, 3200);
       } else {
-        // Wrong
         STATE.isAnimating = true;
         const key = `${leftIdx}-${index}`;
         const explanation = scene.wrongs[key] || "Bu ipuçları birbiriyle bağlantılı değil.";
         vibrate([30, 50, 30]);
 
-        // Shake animation
         const leftClue = document.querySelector(`.clue[data-side="left"][data-index="${leftIdx}"]`);
         const rightClue = document.querySelector(`.clue[data-side="right"][data-index="${index}"]`);
-        if (leftClue) leftClue.classList.add('shake');
-        if (rightClue) rightClue.classList.add('shake');
+        if (leftClue) { leftClue.classList.add('shake'); leftClue.classList.add('wrong'); }
+        if (rightClue) { rightClue.classList.add('shake'); rightClue.classList.add('wrong'); }
 
         showDeduction(explanation, 'wrong');
 
         setTimeout(() => {
-          if (leftClue) leftClue.classList.remove('shake');
-          if (rightClue) rightClue.classList.remove('shake');
+          if (leftClue) { leftClue.classList.remove('shake'); leftClue.classList.remove('wrong'); }
+          if (rightClue) { rightClue.classList.remove('shake'); rightClue.classList.remove('wrong'); }
           hideDeduction();
           STATE.selectedLeft = null;
           STATE.isAnimating = false;
@@ -682,23 +638,24 @@
     function onSceneComplete() {
       if (STATE.currentScene === 0) {
         setTimeout(() => {
-          // Show scene complete overlay
-          $('overlay-title').textContent = 'Sahne 1 Tamamlandı';
-          $('overlay-sub').textContent = 'Yeni ipuçları bekleniyor...';
-          $('scene-overlay').classList.add('show');
+          // Cinematic fade to black
+          $('scene-fade').classList.add('active');
 
           setTimeout(() => {
             STATE.currentScene = 1;
             STATE.selectedLeft = null;
             renderGame();
-            $('scene-overlay').classList.remove('show');
-          }, 1800);
+
+            setTimeout(() => {
+              $('scene-fade').classList.remove('active');
+              animateStoryText();
+            }, 300);
+          }, 1200);
         }, 600);
       } else {
         setTimeout(() => {
           showScreen('reveal');
-          // Delay typewriter for dramatic label entrance
-          setTimeout(() => typewriterReveal(), 1200);
+          setTimeout(() => typewriterReveal(), 1500);
         }, 1000);
       }
     }
