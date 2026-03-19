@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Son Dokunuş — Deductions</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-deep: #0a0a0f;
+      --bg-surface: #141420;
+      --bg-surface-hover: #1c1c2e;
+      --text-primary: #e8e4dc;
+      --text-secondary: #9a9484;
+      --text-muted: #5a5650;
+      --accent-gold: #c9a84c;
+      --accent-gold-dim: rgba(201, 168, 76, 0.15);
+      --accent-red: #8b3a3a;
+      --accent-red-dim: rgba(139, 58, 58, 0.15);
+      --border: #2a2a3a;
+      --border-active: rgba(201, 168, 76, 0.5);
+      --font-serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+    }
+
+    #app {
+      max-width: 480px;
+      margin: 0 auto;
+      height: 100dvh;
+      height: 100vh;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* --- Screens --- */
+    .screen { display: none; flex-direction: column; height: 100%; }
+    .screen.active { display: flex; }
+
+    /* --- Title Screen --- */
+    #screen-title {
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 2rem;
+      animation: fadeIn 1s ease;
+    }
+    #screen-title .eyebrow {
+      font-family: var(--font-sans);
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--accent-gold);
+      margin-bottom: 1rem;
+    }
+    #screen-title h1 {
+      font-family: var(--font-serif);
+      font-size: 2.4rem;
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 0.5rem;
+    }
+    #screen-title .subtitle {
+      font-family: var(--font-serif);
+      font-style: italic;
+      font-size: 1rem;
+      color: var(--text-secondary);
+      margin-bottom: 3rem;
+    }
+    .btn-primary {
+      font-family: var(--font-sans);
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--bg-deep);
+      background: var(--accent-gold);
+      border: none;
+      padding: 0.9rem 2.2rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      touch-action: manipulation;
+    }
+    .btn-primary:active { opacity: 0.8; transform: scale(0.97); }
+
+    /* --- Game Screen --- */
+    #screen-game { padding: 0; }
+    #screen-game.fading { opacity: 0; transition: opacity 0.4s ease; }
+    #screen-game.visible { opacity: 1; transition: opacity 0.4s ease; }
+
+    #story-panel {
+      padding: 1.5rem 1.25rem 0.75rem;
+      flex-shrink: 0;
+    }
+    .scene-label {
+      font-family: var(--font-sans);
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--accent-gold);
+      margin-bottom: 0.6rem;
+    }
+    .story-text {
+      font-family: var(--font-serif);
+      font-size: 1rem;
+      line-height: 1.75;
+      color: var(--text-primary);
+      animation: fadeIn 0.6s ease;
+    }
+
+    /* --- Deduction Panel --- */
+    #deduction-panel {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.5s ease, padding 0.5s ease;
+      padding: 0 1.25rem;
+    }
+    #deduction-panel.show {
+      max-height: 160px;
+      padding: 0.75rem 1.25rem;
+    }
+    .deduction-box {
+      padding: 0.85rem 1rem;
+      border-radius: 6px;
+      font-size: 0.88rem;
+      font-style: italic;
+      line-height: 1.6;
+      animation: slideUp 0.4s ease;
+    }
+    .deduction-box.correct {
+      background: var(--accent-gold-dim);
+      border-left: 3px solid var(--accent-gold);
+      color: var(--text-primary);
+    }
+    .deduction-box.wrong {
+      background: var(--accent-red-dim);
+      border-left: 3px solid var(--accent-red);
+      color: var(--text-secondary);
+    }
+
+    /* --- Clues Panel --- */
+    #clues-panel {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.65rem;
+      padding: 0.75rem 1rem;
+      align-content: start;
+      overflow-y: auto;
+    }
+    .clue-column { display: flex; flex-direction: column; gap: 0.65rem; }
+
+    .clue {
+      font-family: var(--font-sans);
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: var(--text-primary);
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.8rem 0.9rem;
+      cursor: pointer;
+      text-align: left;
+      transition: border-color 0.3s, background-color 0.3s, transform 0.15s, opacity 0.5s;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .clue:active { transform: scale(0.97); }
+    .clue:hover { background: var(--bg-surface-hover); }
+    .clue.selected {
+      border-color: var(--border-active);
+      background: var(--accent-gold-dim);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .clue.solved {
+      opacity: 0.3;
+      pointer-events: none;
+      border-color: var(--border);
+      background: var(--bg-surface);
+    }
+    .clue.shake {
+      animation: shakeX 0.4s ease;
+    }
+    .clue .clue-number {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: var(--accent-gold);
+      margin-bottom: 0.25rem;
+      letter-spacing: 0.1em;
+    }
+
+    /* --- Progress --- */
+    #progress-bar {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 1rem;
+      flex-shrink: 0;
+    }
+    .progress-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: background 0.4s ease;
+    }
+    .progress-dot.filled { background: var(--accent-gold); }
+    .progress-divider {
+      width: 1px; height: 16px;
+      background: var(--border);
+      margin: 0 0.25rem;
+    }
+
+    /* --- Reveal Screen --- */
+    #screen-reveal {
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 2rem;
+    }
+    .reveal-label {
+      font-family: var(--font-sans);
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--accent-gold);
+      margin-bottom: 1.5rem;
+    }
+    #reveal-text {
+      font-family: var(--font-serif);
+      font-size: 1.1rem;
+      line-height: 1.8;
+      color: var(--text-primary);
+      max-width: 360px;
+      min-height: 180px;
+    }
+    #reveal-text strong { color: var(--accent-gold); }
+    #btn-replay {
+      margin-top: 2.5rem;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+    }
+    #btn-replay.show { opacity: 1; }
+
+    /* --- Animations --- */
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.015); }
+    }
+    @keyframes shakeX {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-4px); }
+      40% { transform: translateX(4px); }
+      60% { transform: translateX(-3px); }
+      80% { transform: translateX(3px); }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Title -->
+    <div id="screen-title" class="screen active">
+      <div class="eyebrow">Deductions</div>
+      <h1>Son Dokunuş</h1>
+      <p class="subtitle">Bir ressam, bir villa, bir kış gecesi.</p>
+      <button class="btn-primary" onclick="startGame()">Soruşturmaya Başla</button>
+    </div>
+
+    <!-- Game -->
+    <div id="screen-game" class="screen">
+      <div id="story-panel">
+        <div class="scene-label" id="scene-label"></div>
+        <p class="story-text" id="story-text"></p>
+      </div>
+      <div id="deduction-panel">
+        <div class="deduction-box" id="deduction-box"></div>
+      </div>
+      <div id="clues-panel">
+        <div class="clue-column" id="col-left"></div>
+        <div class="clue-column" id="col-right"></div>
+      </div>
+      <div id="progress-bar"></div>
+    </div>
+
+    <!-- Reveal -->
+    <div id="screen-reveal" class="screen">
+      <div class="reveal-label">Sonuç</div>
+      <div id="reveal-text"></div>
+      <button class="btn-primary" id="btn-replay" onclick="resetGame()">Yeniden Oyna</button>
+    </div>
+  </div>
+
+  <script>
+    const SCENES = [
+      {
+        title: "Sahne 1 — Villa'nın Atölyesi",
+        story: "Ressam Ada Serin, kış gecesinin ortasında villasının atölyesinde ölü bulundu. Son tablosu yarım kalmış, yerde kırık bir şarap kadehi. Otopsi sonucu: zehirlenme.",
+        left: [
+          "Kırık şarap kadehindeki leke",
+          "Yarım tablodaki gizli imza",
+          "Şöminenin yanındaki kül"
+        ],
+        right: [
+          "Masadaki ikinci kadeh izi",
+          "İmza Ada'nın değil",
+          "Yakılmış mektup köşesi"
+        ],
+        matches: [
+          { l: 0, r: 0, text: "Ada yalnız değildi. Biriyle şarap içiyordu. Katil, tanıdığı biriydi." },
+          { l: 1, r: 1, text: "Tablodaki gizli imza Ada'ya ait değil. Birisi onun eserini sahiplenmek istiyordu." },
+          { l: 2, r: 2, text: "Birisi bir mektubu aceleyle yakmış. Köşede okunan tek kelime: 'miras.'" }
+        ],
+        wrongs: {
+          "0-1": "Kadeh lekesi ile imza arasında doğrudan bir bağlantı yok.",
+          "0-2": "Kırık kadeh ile yakılmış mektup farklı olaylara işaret ediyor.",
+          "1-0": "Gizli imza ile ikinci kadeh izi farklı ipuçlarına ait.",
+          "1-2": "İmza ile yakılmış mektup arasında bir bağ kurulamıyor.",
+          "2-0": "Şöminedeki kül ile kadeh izi bağlantısız görünüyor.",
+          "2-1": "Kül ile imza farklı kanıt zincirlerine ait."
+        }
+      },
+      {
+        title: "Sahne 2 — Ada'nın Çalışma Odası",
+        story: "Çalışma odasında Ada'nın geçmişine dair ipuçları var. Masada dağınık belgeler, duvarda eski aile fotoğrafları asılı.",
+        left: [
+          "Avukata yazılmış vasiyetname taslağı",
+          "Boya lekeli erkek gömleği",
+          "Ada'nın telefonundaki son arama"
+        ],
+        right: [
+          "\"Mirası değiştiriyorum\" notu",
+          "Kardeşi Emre'nin resim eğitimi",
+          "Son arama: Emre, gece 23:47"
+        ],
+        matches: [
+          { l: 0, r: 0, text: "Ada vasiyetini değiştirmek üzereydi. Birisi bunu engellemek istedi." },
+          { l: 1, r: 1, text: "Gömlek Emre'nin. O gece atölyedeydi ve tabloya kendi imzasını attı." },
+          { l: 2, r: 2, text: "Ada ölmeden önce Emre'yi aramış. Emre villaya geldi… ve bir daha ayrılmadı." }
+        ],
+        wrongs: {
+          "0-1": "Vasiyetname ile resim eğitimi arasında doğrudan bir ilişki yok.",
+          "0-2": "Vasiyetname taslağı ile telefon araması farklı kanıtlara işaret ediyor.",
+          "1-0": "Gömlek ile miras notu arasında bağlantı kurulamıyor.",
+          "1-2": "Boya lekeli gömlek ile telefon araması farklı ipuçları.",
+          "2-0": "Son arama ile vasiyetname değişikliği doğrudan bağlanamıyor.",
+          "2-1": "Telefon araması ile resim eğitimi arasında bir örüntü yok."
+        }
+      }
+    ];
+
+    const REVEAL_TEXT = 'Tüm kanıtlar bir kişiyi işaret ediyor: Ada\'nın kardeşi <strong>Emre Serin</strong>. Mirası almak ve Ada\'nın son tablosunu kendi eseri olarak sahiplenmek için onu zehirledi. Yakılan mektup, vasiyetin değişeceğinin kanıtıydı. Emre o gece villaya geldi, Ada ile son bir kadeh şarap içti — ve o kadehi zehirledi.';
+
+    const STATE = {
+      currentScreen: 'title',
+      currentScene: 0,
+      selectedLeft: null,
+      solvedMatches: [[], []],
+      isAnimating: false
+    };
+
+    function $(id) { return document.getElementById(id); }
+
+    function showScreen(name) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      $('screen-' + name).classList.add('active');
+      STATE.currentScreen = name;
+    }
+
+    function startGame() {
+      STATE.currentScene = 0;
+      STATE.selectedLeft = null;
+      STATE.solvedMatches = [[], []];
+      showScreen('game');
+      $('screen-game').classList.remove('fading');
+      $('screen-game').classList.add('visible');
+      renderGame();
+    }
+
+    function renderGame() {
+      const scene = SCENES[STATE.currentScene];
+      $('scene-label').textContent = scene.title;
+      $('story-text').textContent = scene.story;
+
+      // Render clues
+      renderColumn('col-left', scene.left, 'left');
+      renderColumn('col-right', scene.right, 'right');
+
+      // Progress dots
+      renderProgress();
+    }
+
+    function renderColumn(colId, items, side) {
+      const col = $(colId);
+      const solved = STATE.solvedMatches[STATE.currentScene];
+      col.innerHTML = '';
+      items.forEach((text, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'clue';
+        btn.dataset.side = side;
+        btn.dataset.index = i;
+
+        const isSolved = solved.some(m => (side === 'left' ? m.l : m.r) === i);
+        if (isSolved) btn.classList.add('solved');
+        if (side === 'left' && STATE.selectedLeft === i && !isSolved) btn.classList.add('selected');
+
+        const label = side === 'left' ? 'KANIT' : 'İPUCU';
+        btn.innerHTML = `<span class="clue-number">${label} ${i + 1}</span><br>${text}`;
+        col.appendChild(btn);
+      });
+    }
+
+    function renderProgress() {
+      const bar = $('progress-bar');
+      bar.innerHTML = '';
+      for (let s = 0; s < 2; s++) {
+        for (let i = 0; i < 3; i++) {
+          const dot = document.createElement('span');
+          dot.className = 'progress-dot';
+          if (STATE.solvedMatches[s].length > i) dot.classList.add('filled');
+          bar.appendChild(dot);
+        }
+        if (s === 0) {
+          const div = document.createElement('span');
+          div.className = 'progress-divider';
+          bar.appendChild(div);
+        }
+      }
+    }
+
+    function showDeduction(text, type) {
+      const box = $('deduction-box');
+      box.className = 'deduction-box ' + type;
+      box.textContent = text;
+      $('deduction-panel').classList.add('show');
+    }
+
+    function hideDeduction() {
+      $('deduction-panel').classList.remove('show');
+    }
+
+    function vibrate(pattern) {
+      try { if (navigator.vibrate) navigator.vibrate(pattern); } catch(e) {}
+    }
+
+    function handleClueTap(side, index) {
+      if (STATE.isAnimating) return;
+
+      const scene = SCENES[STATE.currentScene];
+      const solved = STATE.solvedMatches[STATE.currentScene];
+      const isSolved = solved.some(m => (side === 'left' ? m.l : m.r) === index);
+      if (isSolved) return;
+
+      if (side === 'left') {
+        STATE.selectedLeft = (STATE.selectedLeft === index) ? null : index;
+        hideDeduction();
+        renderGame();
+        return;
+      }
+
+      // Right side tap
+      if (STATE.selectedLeft === null) return;
+
+      const leftIdx = STATE.selectedLeft;
+      const match = scene.matches.find(m => m.l === leftIdx && m.r === index);
+
+      if (match) {
+        // Correct
+        STATE.isAnimating = true;
+        STATE.solvedMatches[STATE.currentScene].push({ l: leftIdx, r: index });
+        STATE.selectedLeft = null;
+        vibrate(10);
+        showDeduction(match.text, 'correct');
+        renderGame();
+
+        setTimeout(() => {
+          hideDeduction();
+          STATE.isAnimating = false;
+          if (STATE.solvedMatches[STATE.currentScene].length === 3) {
+            onSceneComplete();
+          }
+        }, 2800);
+      } else {
+        // Wrong
+        STATE.isAnimating = true;
+        const key = `${leftIdx}-${index}`;
+        const explanation = scene.wrongs[key] || "Bu ipuçları birbiriyle bağlantılı değil.";
+        vibrate([30, 50, 30]);
+
+        // Shake animation
+        const leftClue = document.querySelector(`.clue[data-side="left"][data-index="${leftIdx}"]`);
+        const rightClue = document.querySelector(`.clue[data-side="right"][data-index="${index}"]`);
+        if (leftClue) leftClue.classList.add('shake');
+        if (rightClue) rightClue.classList.add('shake');
+
+        showDeduction(explanation, 'wrong');
+
+        setTimeout(() => {
+          if (leftClue) leftClue.classList.remove('shake');
+          if (rightClue) rightClue.classList.remove('shake');
+          hideDeduction();
+          STATE.selectedLeft = null;
+          STATE.isAnimating = false;
+          renderGame();
+        }, 1800);
+      }
+    }
+
+    function onSceneComplete() {
+      if (STATE.currentScene === 0) {
+        // Transition to scene 2
+        setTimeout(() => {
+          const gameEl = $('screen-game');
+          gameEl.classList.add('fading');
+          gameEl.classList.remove('visible');
+          setTimeout(() => {
+            STATE.currentScene = 1;
+            STATE.selectedLeft = null;
+            renderGame();
+            gameEl.classList.remove('fading');
+            gameEl.classList.add('visible');
+          }, 450);
+        }, 600);
+      } else {
+        // Show reveal
+        setTimeout(() => {
+          showScreen('reveal');
+          typewriterReveal();
+        }, 1000);
+      }
+    }
+
+    function typewriterReveal() {
+      const el = $('reveal-text');
+      el.innerHTML = '';
+      const chars = REVEAL_TEXT.split('');
+      let i = 0;
+      let inTag = false;
+      let buffer = '';
+
+      function tick() {
+        if (i >= chars.length) {
+          el.innerHTML = buffer;
+          setTimeout(() => $('btn-replay').classList.add('show'), 600);
+          return;
+        }
+        const ch = chars[i];
+        if (ch === '<') inTag = true;
+        if (inTag) {
+          buffer += ch;
+          if (ch === '>') {
+            inTag = false;
+            el.innerHTML = buffer;
+          }
+          i++;
+          tick();
+          return;
+        }
+        buffer += ch;
+        el.innerHTML = buffer;
+        i++;
+        setTimeout(tick, 35);
+      }
+      tick();
+    }
+
+    function resetGame() {
+      $('btn-replay').classList.remove('show');
+      $('reveal-text').innerHTML = '';
+      showScreen('title');
+    }
+
+    // Event delegation
+    $('clues-panel').addEventListener('click', (e) => {
+      const clue = e.target.closest('.clue');
+      if (!clue) return;
+      handleClueTap(clue.dataset.side, parseInt(clue.dataset.index));
+    });
+  </script>
+</body>
+</html>
