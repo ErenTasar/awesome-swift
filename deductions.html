@@ -49,12 +49,22 @@ var initialHeight=window.innerHeight;
 var CONTENT_HEIGHT=190; // başlık(~50) + kartlar(~124) + padding(~16)
 appContainer.style.height=initialHeight+"px";
 
+var idleTop=Math.max(40,Math.round((initialHeight-CONTENT_HEIGHT)/2));
+contentBlock.style.top=idleTop+"px";
+contentBlock.style.transition="top .32s cubic-bezier(.25,1,.5,1)";
+
 function positionContent(){
-var visibleH=initialHeight;
-var top=Math.max(40,Math.round((visibleH-CONTENT_HEIGHT)/2));
+var visibleH=window.visualViewport?window.visualViewport.height:initialHeight;
+var kbOpen=initialHeight-visibleH>100;
+if(kbOpen){
+// Klavye açık: kartların alt kenarı klavyenin 24px üstünde olacak şekilde
+var bottom=visibleH-24;
+var top=Math.max(20,bottom-CONTENT_HEIGHT);
 contentBlock.style.top=top+"px";
+}else{
+contentBlock.style.top=idleTop+"px";
 }
-positionContent();
+}
 
 function compensateScroll(){
 if(window.visualViewport){
@@ -69,6 +79,7 @@ document.body.scrollTop=0;
 if(window.visualViewport){
 window.visualViewport.addEventListener("resize",function(){
 appContainer.style.height=initialHeight+"px";
+positionContent();
 compensateScroll();
 });
 window.visualViewport.addEventListener("scroll",function(){
@@ -371,9 +382,27 @@ updateSubtitle();
 function cancelAdding(){
 adding=false;addingLock=false;newCol=null;
 const nc=track.querySelector(".new-card");
-if(nc)nc.remove();
+if(!nc){updateSubtitle();if(todos.length===0)showEmptyState();return;}
+// Animate out: fade + shrink then collapse
+requestAnimationFrame(function(){
+Object.assign(nc.style,{
+opacity:"0",
+transform:"scale(.82) translateY(-8px)",
+transition:"opacity .26s ease, transform .26s cubic-bezier(.4,0,.2,1)",
+});
+});
+setTimeout(function(){
+nc.style.transition="width .28s cubic-bezier(.4,0,.2,1), margin .28s cubic-bezier(.4,0,.2,1)";
+nc.style.width="0px";nc.style.marginRight="0px";nc.style.overflow="hidden";
+nc.addEventListener("transitionend",function handler(e){
+if(e.propertyName==="width"){
+nc.removeEventListener("transitionend",handler);
+nc.remove();
 updateSubtitle();
-if(todos.length===0)showEmptyState();
+if(todos.length===0&&!adding)showEmptyState();
+}
+});
+},260);
 }
 
 function doAdd(){
