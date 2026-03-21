@@ -14,7 +14,7 @@ input::placeholder{color:rgba(255,255,255,.3)}
 </head>
 <body>
 <div id="root">
-  <div id="appContainer" style="position:fixed;top:0;left:0;right:0;height:100%;background:#000;overflow:hidden;touch-action:none;font-family:-apple-system,'SF Pro Rounded','SF Pro Display',BlinkMacSystemFont,sans-serif">
+  <div id="appContainer" style="position:fixed;top:0;left:0;right:0;height:100%;background:#000;overflow:hidden;touch-action:pan-x;font-family:-apple-system,'SF Pro Rounded','SF Pro Display',BlinkMacSystemFont,sans-serif">
     <div id="contentBlock" style="position:absolute;left:0;right:0;top:130px;will-change:opacity,transform">
       <div style="padding:0 20px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
         <div>
@@ -31,7 +31,7 @@ input::placeholder{color:rgba(255,255,255,.3)}
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </div>
         </div>
-        <div id="scrollContainer" style="overflow-x:auto;overflow-y:hidden;position:relative;z-index:1;user-select:none;-webkit-user-select:none">
+        <div id="scrollContainer" style="overflow-x:auto;overflow-y:hidden;position:relative;z-index:1;user-select:none;-webkit-user-select:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain">
           <div id="track" style="display:flex;padding:0 20px"></div>
         </div>
       </div>
@@ -1021,8 +1021,6 @@ var Gestures=(function(){
       var t=e.touches[0];
       g={active:true,pulling:false,startX:t.clientX,startY:t.clientY,lastX:t.clientX,
          axis:null,dy:0,swiping:false,direction:null,pullVal:0,scrollStart:sc.scrollLeft};
-      vel.reset();
-      vel.add(t.clientX);
     },{passive:true});
 
     ac.addEventListener("touchmove",function(e){
@@ -1036,30 +1034,15 @@ var Gestures=(function(){
         if(!g.axis)return;
       }
 
-      // ── YATAY: scroll veya pull-to-add ──
+      // ── YATAY: native scroll + pull-to-add ──
       if(g.axis==="x"){
-        e.preventDefault();
-        vel.add(t.clientX);
-        var frameDx=t.clientX-g.lastX;
         g.lastX=t.clientX;
-
         if(!g.pulling&&g.scrollStart<2&&sc.scrollLeft<2&&dx>4)g.pulling=true;
-
         if(g.pulling){
+          e.preventDefault();
           applyPull(dx);
-        }else{
-          var before=sc.scrollLeft;
-          sc.scrollLeft-=frameDx;
-          var clamped=sc.scrollLeft===before&&frameDx!==0;
-          if(clamped){
-            g.overscroll=(g.overscroll||0)+frameDx*0.5;
-            g.overscroll=Math.sign(g.overscroll)*Math.min(Math.abs(g.overscroll),80);
-            DOM.track.style.transform="translateX("+g.overscroll+"px)";
-          }else if(g.overscroll){
-            g.overscroll=0;
-            DOM.track.style.transform="";
-          }
         }
+        // else: preventDefault yok → tarayıcı native scroll yapar
         return;
       }
 
@@ -1085,19 +1068,12 @@ var Gestures=(function(){
     ac.addEventListener("touchend",function(){
       if(!g.active)return;
 
-      // Yatay finalize
+      // Yatay finalize (sadece pull-to-add; scroll momentum tarayıcıda)
       if(g.axis==="x"){
         if(g.pulling&&(g.pullVal||0)>Config.PULL_THRESHOLD){
           commitPull(g.pullVal||0);
         }else if(g.pulling){
           resetVisuals();
-        }else{
-          if(g.overscroll&&Math.abs(g.overscroll)>2){
-            bounce(g.overscroll);
-          }else{
-            var v=vel.get();
-            if(Math.abs(v)>Config.MOMENTUM_MIN)startMomentum(v);
-          }
         }
       }
 
