@@ -642,7 +642,7 @@ var UI=(function(){
 
     renderAll:function(){
       DOM.track.innerHTML="";
-      DOM.scrollContainer.scrollLeft=0;
+      DOM.scrollContainer.scrollLeft=0;Peek.syncScroll(0);
       var list=State.activeList();
       if(list.length===0&&!State.adding){
         UI.showEmptyState();
@@ -674,9 +674,13 @@ var UI=(function(){
    PEEK — Blurred mini-card preview of the other view layer
    ═══════════════════════════════════════════ */
 var Peek=(function(){
-  var SCALE=0.6;
+  var SCALE=0.75;
   var storedFixedTop=0;
-  var CARD_AREA_OFFSET=52; // header height + padding approx
+  var CARD_AREA_OFFSET=52;
+  var MASK_ALPHA_ABOVE=0.32;
+  var MASK_ALPHA_BELOW=0.25;
+  var PARALLAX_ABOVE=0.45;
+  var PARALLAX_BELOW=0.55;
 
   function miniCards(list){
     var d=document.createElement("div");
@@ -691,12 +695,10 @@ var Peek=(function(){
     return d;
   }
 
-  var MASK_ALPHA=0.35;
-
-  function applyMask(el,direction){
+  function applyMask(el,direction,alpha){
     el.style.filter="none";
     el.style.opacity="1";
-    var grad="linear-gradient(to "+direction+", rgba(0,0,0,"+MASK_ALPHA+") 10%, transparent 70%)";
+    var grad="linear-gradient(to "+direction+", rgba(0,0,0,"+alpha+") 10%, transparent 70%)";
     el.style.maskImage=grad;
     el.style.webkitMaskImage=grad;
   }
@@ -707,14 +709,14 @@ var Peek=(function(){
 
     if(State.view==="categories"&&State.lastCategory&&State.lastCategory.todos.length>0){
       DOM.peekBelow.appendChild(miniCards(State.lastCategory.todos));
-      applyMask(DOM.peekBelow,"bottom");
+      applyMask(DOM.peekBelow,"bottom",MASK_ALPHA_BELOW);
     }else{
       DOM.peekBelow.style.opacity="0";
     }
 
     if(State.view==="tasks"&&State.categories.length>0){
       DOM.peekAbove.appendChild(miniCards(State.categories));
-      applyMask(DOM.peekAbove,"top");
+      applyMask(DOM.peekAbove,"top",MASK_ALPHA_ABOVE);
     }else{
       DOM.peekAbove.style.opacity="0";
     }
@@ -722,8 +724,8 @@ var Peek=(function(){
 
   function position(fixedTop){
     storedFixedTop=fixedTop;
-    DOM.peekBelow.style.top=(fixedTop+Config.CONTENT_HEIGHT+24)+"px";
-    DOM.peekAbove.style.top=(fixedTop-70)+"px";
+    DOM.peekBelow.style.top=(fixedTop+Config.CONTENT_HEIGHT+36)+"px";
+    DOM.peekAbove.style.top=(fixedTop-55)+"px";
   }
 
   function hide(){
@@ -731,46 +733,62 @@ var Peek=(function(){
     DOM.peekAbove.style.opacity="0";
   }
 
-  // ── Morph: peek → gerçek kartlara dönüşüm ──
+  // ── Parallax: ana scroll ile senkron ──
+
+  function syncScroll(scrollLeft){
+    var aboveInner=DOM.peekAbove.firstChild;
+    var belowInner=DOM.peekBelow.firstChild;
+    if(aboveInner)aboveInner.style.transform="translateX("+(-scrollLeft*PARALLAX_ABOVE)+"px)";
+    if(belowInner)belowInner.style.transform="translateX("+(-scrollLeft*PARALLAX_BELOW)+"px)";
+  }
+
+  // ── Morph: peek → gerçek kartlara dönüşüm (fazlı zamanlama) ──
 
   function animateStart(direction){
-    // up → peekBelow aktif (taskler aşağıda), down → peekAbove aktif (kategoriler yukarıda)
     var active=direction==="up"?DOM.peekBelow:DOM.peekAbove;
     var other=direction==="up"?DOM.peekAbove:DOM.peekBelow;
     other.style.opacity="0";
     if(!active.firstChild||active.style.opacity==="0")return null;
     active.style.transition="none";
+    active.style.zIndex="20";
     return active;
   }
 
   function animateProgress(el,progress,direction){
     var p=Math.min(progress,1);
-    var s=SCALE+p*(1-SCALE); // 0.6 → 1.0
+    var s=SCALE+p*(1-SCALE);
     var peekTop=parseFloat(el.style.top);
     var targetTop=storedFixedTop+CARD_AREA_OFFSET;
     var dy=(targetTop-peekTop)*p;
     el.style.transform="translateY("+dy+"px) scale("+s+")";
     el.style.transformOrigin="left top";
-    // Mask gevşetme: alpha 0.35 → 1.0
-    var alpha=MASK_ALPHA+p*(1-MASK_ALPHA);
-    var startPct=10+p*40;
-    var endPct=70+p*30;
+
+    // Mask: p=0.7'ye kadar tamamen gevşer
+    var maskP=Math.min(p/0.7,1);
+    var baseAlpha=direction==="up"?MASK_ALPHA_BELOW:MASK_ALPHA_ABOVE;
+    var alpha=baseAlpha+maskP*(1-baseAlpha);
+    var startPct=10+maskP*90;
     var dir=direction==="up"?"bottom":"top";
-    var grad="linear-gradient(to "+dir+", rgba(0,0,0,"+alpha+") "+startPct+"%, transparent "+endPct+"%)";
+    var grad="linear-gradient(to "+dir+", rgba(0,0,0,"+alpha+") "+startPct+"%, transparent 100%)";
     el.style.maskImage=grad;
     el.style.webkitMaskImage=grad;
+
+    // Opacity: p=0.75'e kadar tam, sonra fade-out
+    var fadeP=Math.max(0,(p-0.75)/0.25);
+    el.style.opacity=String(1-fadeP);
   }
 
   function animateEnd(el){
     el.style.transform="none";
+    el.style.zIndex="";
     el.style.transition="opacity .3s";
     el.style.maskImage="";
     el.style.webkitMaskImage="";
   }
 
-  return {update:update,position:position,hide:hide,
+  return {update:update,position:position,hide:hide,syncScroll:syncScroll,
           animateStart:animateStart,animateProgress:animateProgress,animateEnd:animateEnd,
-          SCALE:SCALE,MASK_ALPHA:MASK_ALPHA};
+          SCALE:SCALE};
 })();
 
 
@@ -789,7 +807,7 @@ var TodoManager={
     var color=Config.pickColor(list.map(function(t){return t.color.bg;}));
 
     UI.removeEmptyState();
-    DOM.scrollContainer.scrollLeft=0;
+    DOM.scrollContainer.scrollLeft=0;Peek.syncScroll(0);
 
     var el=CardFactory.blank(color,pullWidth);
     DOM.track.insertBefore(el,DOM.track.firstChild);
@@ -893,11 +911,15 @@ var Navigation=(function(){
     DOM.viewTitle.textContent=State.view==="categories"?"Kategoriler":State.currentCategory.text;
   }
 
+  var swipeTargetCategory=null;
+  var savedLastCategory=null;
+
   function swapView(direction){
     if(direction==="down"){
       State.view="categories";State.currentCategory=null;
     }else{
-      State.view="tasks";State.currentCategory=State.lastCategory;
+      var cat=swipeTargetCategory||State.lastCategory;
+      State.view="tasks";State.currentCategory=cat;State.lastCategory=cat;
     }
     updateHeader();
     UI.renderAll();
@@ -908,6 +930,7 @@ var Navigation=(function(){
       State.view="tasks";State.currentCategory=State.lastCategory;
     }else{
       State.view="categories";State.currentCategory=null;
+      if(savedLastCategory!==undefined)State.lastCategory=savedLastCategory;
     }
     updateHeader();
     UI.renderAll();
@@ -928,19 +951,21 @@ var Navigation=(function(){
     ],{duration:250,easing:EASE,fill:"forwards"});
 
     var bA=DOM.contentBlock.animate([
-      {opacity:0,transform:"translate3d(0,"+(-sign*20)+"px,0)"},
+      {opacity:0,transform:"translate3d(0,"+(-sign*8)+"px,0)"},
       {opacity:1,transform:"translate3d(0,0,0)"}
     ],{duration:250,easing:EASE,fill:"forwards"});
 
     currentAnim=[sA,bA];
 
-    // Peek morph: tap ile tek seferde 0→1 animasyonu
+    // Peek morph: tap — offset keyframe ile fazlı
     if(activePeekEl){
       var peekTop=parseFloat(activePeekEl.style.top);
       var targetY=parseFloat(DOM.contentBlock.style.top)+52-peekTop;
+      var midScale=Peek.SCALE+0.75*(1-Peek.SCALE);
       var pA=activePeekEl.animate([
-        {transform:"translateY(0) scale("+Peek.SCALE+")",opacity:1},
-        {transform:"translateY("+targetY+"px) scale(1)",opacity:0}
+        {offset:0,transform:"translateY(0) scale("+Peek.SCALE+")",opacity:1},
+        {offset:0.75,transform:"translateY("+(targetY*0.75)+"px) scale("+midScale+")",opacity:1},
+        {offset:1,transform:"translateY("+targetY+"px) scale(1)",opacity:0}
       ],{duration:250,easing:EASE,fill:"forwards"});
       currentAnim.push(pA);
     }
@@ -949,9 +974,11 @@ var Navigation=(function(){
   }
 
   // ── Progressive swipe ──
-  function startSwipe(direction){
+  function startSwipe(direction,targetCategory){
     cleanup();
     activePeekEl=Peek.animateStart(direction);
+    savedLastCategory=State.lastCategory;
+    swipeTargetCategory=targetCategory||null;
     swipeGen++;
     var myGen=swipeGen;
     viewReady=false;
@@ -959,7 +986,7 @@ var Navigation=(function(){
 
     createSnapshot();
     DOM.contentBlock.style.opacity="0";
-    DOM.contentBlock.style.transform="translate3d(0,"+(-sign*20)+"px,0)";
+    DOM.contentBlock.style.transform="translate3d(0,"+(-sign*8)+"px,0)";
 
     requestAnimationFrame(function(){
       if(swipeGen!==myGen)return;
@@ -973,14 +1000,19 @@ var Navigation=(function(){
     var p=Math.min(progress,1);
     var sign=direction==="down"?1:-1;
 
-    snapshotEl.style.opacity=String(1-p);
-    snapshotEl.style.transform="translate3d(0,"+(sign*p*25)+"px,0)";
+    // Snapshot: hızlı çıkar (p=0.7'de tamamen kaybolur)
+    var snapP=Math.min(p/0.7,1);
+    snapshotEl.style.opacity=String(1-snapP);
+    snapshotEl.style.transform="translate3d(0,"+(sign*snapP*25)+"px,0)";
 
+    // Content: p=0.10'dan başlar, gecikmeli girer
     if(viewReady){
-      DOM.contentBlock.style.opacity=String(p);
-      DOM.contentBlock.style.transform="translate3d(0,"+(-sign*(1-p)*20)+"px,0)";
+      var contentP=Math.max(0,Math.min((p-0.10)/0.90,1));
+      DOM.contentBlock.style.opacity=String(contentP);
+      DOM.contentBlock.style.transform="translate3d(0,"+(-sign*(1-contentP)*8)+"px,0)";
     }
 
+    // Peek morph (fazlı opacity kendi içinde yönetiliyor)
     if(activePeekEl)Peek.animateProgress(activePeekEl,p,direction);
   }
 
@@ -1006,9 +1038,10 @@ var Navigation=(function(){
 
       // Peek morph tamamlama animasyonu
       if(activePeekEl){
+        var curOp=activePeekEl.style.opacity||"1";
         var pA=activePeekEl.animate([
-          {transform:activePeekEl.style.transform||"none",opacity:1},
-          {transform:"none",opacity:0}
+          {transform:activePeekEl.style.transform||"none",opacity:curOp},
+          {transform:"none",opacity:"0"}
         ],{duration:150,easing:EASE,fill:"forwards"});
         currentAnim=[sA,bA,pA];
       }else{
@@ -1023,10 +1056,20 @@ var Navigation=(function(){
 
       var bA=b.animate([
         {opacity:bOp,transform:bTr},
-        {opacity:0,transform:"translate3d(0,"+(-sign*20)+"px,0)"}
+        {opacity:0,transform:"translate3d(0,"+(-sign*8)+"px,0)"}
       ],{duration:180,easing:EASE,fill:"forwards"});
 
       currentAnim=[sA,bA];
+
+      // Peek reverse morph (cancel)
+      if(activePeekEl){
+        var pA=activePeekEl.animate([
+          {transform:activePeekEl.style.transform||"none",opacity:activePeekEl.style.opacity||"1"},
+          {transform:"none",opacity:"1"}
+        ],{duration:180,easing:EASE,fill:"forwards"});
+        currentAnim.push(pA);
+      }
+
       bA.onfinish=function(){
         revertView(direction);
         cleanup();
@@ -1195,7 +1238,7 @@ var Gestures=(function(){
       }
 
       if(Math.abs(vel)<Config.MOMENTUM_MIN){momentumRAF=null;return;}
-      sc.scrollLeft-=vel;
+      sc.scrollLeft-=vel;Peek.syncScroll(sc.scrollLeft);
       if((sc.scrollLeft<=0&&vel>0)||(sc.scrollLeft>=maxSc&&vel<0)){
         momentumRAF=null;
         var over=vel*6;
@@ -1292,7 +1335,7 @@ var Gestures=(function(){
         if(!g.axis){
           e.preventDefault();
           velocity.add(t.clientX);
-          scrollEl.scrollLeft-=(t.clientX-g.lastX);
+          scrollEl.scrollLeft-=(t.clientX-g.lastX);Peek.syncScroll(scrollEl.scrollLeft);
           g.lastX=t.clientX;
           return;
         }
@@ -1312,7 +1355,7 @@ var Gestures=(function(){
           applyPull(dx);
         }else{
           var before=scrollEl.scrollLeft;
-          scrollEl.scrollLeft-=frameDx;
+          scrollEl.scrollLeft-=frameDx;Peek.syncScroll(scrollEl.scrollLeft);
           var clamped=scrollEl.scrollLeft===before&&frameDx!==0;
           if(clamped){
             g.overscroll=(g.overscroll||0)+frameDx*0.5;
@@ -1334,9 +1377,18 @@ var Gestures=(function(){
 
       if(!g.swiping&&Math.abs(dy)>15){
         var dir=dy>0?"down":"up";
-        var canSwipe=(dir==="down"&&State.view==="tasks")||
-                     (dir==="up"&&State.view==="categories"&&State.lastCategory);
-        if(canSwipe){g.swiping=true;g.direction=dir;Navigation.startSwipe(dir);}
+        var canSwipe=false;
+        var swipeCat=null;
+        if(dir==="down"&&State.view==="tasks"){
+          canSwipe=true;
+        }else if(dir==="up"&&State.view==="categories"){
+          // Parmak pozisyonundaki kategoriyi bul
+          var relX=t.clientX+scrollEl.scrollLeft-20;
+          var catIdx=Math.max(0,Math.min(Math.floor(relX/Config.SLOT),State.categories.length-1));
+          var cat=State.categories[catIdx];
+          if(cat&&cat.todos.length>0){canSwipe=true;swipeCat=cat;}
+        }
+        if(canSwipe){g.swiping=true;g.direction=dir;Navigation.startSwipe(dir,swipeCat);}
       }
 
       if(g.swiping){
@@ -1419,7 +1471,7 @@ var Gestures=(function(){
       if(g.pulling){applyPull(dx);}
       else{
         var before=scrollEl.scrollLeft;
-        scrollEl.scrollLeft-=frameDx;
+        scrollEl.scrollLeft-=frameDx;Peek.syncScroll(scrollEl.scrollLeft);
         var clamped=scrollEl.scrollLeft===before&&frameDx!==0;
         if(clamped){
           g.overscroll=(g.overscroll||0)+frameDx*0.5;
