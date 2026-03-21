@@ -1017,7 +1017,13 @@ var Gestures=(function(){
 
       if(!g.axis){
         g.axis=detectAxis(dx,dy);
-        if(!g.axis)return;
+        if(!g.axis){
+          e.preventDefault();
+          sc.scrollLeft-=(t.clientX-g.lastX);
+          g.lastX=t.clientX;
+          return;
+        }
+        if(g.axis==="y")sc.scrollLeft=g.scrollStart;
       }
 
       // ── YATAY: scroll veya pull-to-add ──
