@@ -313,12 +313,13 @@ subtitle.textContent="← sola çek veya + ile ekle";
 }
 }
 
-function createNewCardEl(color){
+function createNewCardEl(color,pullWidth){
 // Dış collapser — width animasyonu için
+var startW=pullWidth?Math.min(pullWidth,W+GAP):0;
 const collapser=document.createElement("div");
 Object.assign(collapser.style,{
-width:"0px",overflow:"hidden",flexShrink:"0",
-transition:"width .3s cubic-bezier(.34,1.2,.64,1)",
+width:startW+"px",overflow:"hidden",flexShrink:"0",
+transition:"width .32s cubic-bezier(.25,1,.5,1)",
 });
 collapser.className="new-card";
 
@@ -367,18 +368,19 @@ content.appendChild(input);
 card.appendChild(content);
 collapser.appendChild(card);
 
-// Animate in: width expand, then fade+scale (fade-out'un simetrisi)
+// Animate in: width expand + fade-in
 requestAnimationFrame(function(){
 requestAnimationFrame(function(){
 collapser.style.width=(W+GAP)+"px";
 });
 });
-// Width açıldıktan sonra kart fade-in (fade-out'taki .3s timing'in aynısı)
+// pullWidth varsa alan zaten kısmen açık, daha erken fade-in
+var fadeDelay=pullWidth?100:320;
 setTimeout(function(){
 card.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
 card.style.opacity="1";
 card.style.transform="scale(1) translateY(0)";
-},320);
+},fadeDelay);
 
 // Focus transfer: proxy zaten klavyeyi açtı, şimdi gerçek input'a geç
 requestAnimationFrame(function(){
@@ -475,7 +477,7 @@ if(todos.length===0&&!adding)showEmptyState();
 },300);
 }
 
-function doAdd(){
+function doAdd(pullWidth){
 if(addingLock)return;
 // Senkron proxy focus — user gesture zincirinde klavyeyi aktifleştirir
 proxyInput.focus({preventScroll:true});
@@ -486,7 +488,7 @@ newCol=rndColor(usedColors);
 removeEmptyState();
 
 // Insert new card at beginning of track
-const newCardEl=createNewCardEl(newCol);
+const newCardEl=createNewCardEl(newCol,pullWidth);
 track.insertBefore(newCardEl,track.firstChild);
 updateSubtitle();
 }
@@ -558,8 +560,17 @@ updateIndicator(g.pullVal);
 
 scrollContainer.addEventListener("touchend",function(){
 if(!g.active)return;
-if(g.pulling&&(g.pullVal||0)>TH)doAdd();
-resetVisuals();g={active:false};
+if(g.pulling&&(g.pullVal||0)>TH){
+doAdd(g.pullVal||0);
+// Track transform sıfırla (collapser alanı tutuyor), indicator gizle
+track.style.transition="transform .3s cubic-bezier(.25,1,.5,1)";
+track.style.transform="";
+pullIndicator.style.opacity="0";
+pullIndicator.style.transform="translateX(-56px) scale(.3)";
+}else{
+resetVisuals();
+}
+g={active:false};
 },{passive:true});
 
 scrollContainer.addEventListener("touchcancel",function(){
@@ -590,8 +601,16 @@ scrollContainer.scrollLeft=g.sl-dx;
 
 window.addEventListener("mouseup",function(){
 if(!g.active||!g.mouse)return;
-if(g.pulling&&(g.pullVal||0)>TH)doAdd();
-resetVisuals();g={active:false};
+if(g.pulling&&(g.pullVal||0)>TH){
+doAdd(g.pullVal||0);
+track.style.transition="transform .3s cubic-bezier(.25,1,.5,1)";
+track.style.transform="";
+pullIndicator.style.opacity="0";
+pullIndicator.style.transform="translateX(-56px) scale(.3)";
+}else{
+resetVisuals();
+}
+g={active:false};
 });
 
 // Initial render
