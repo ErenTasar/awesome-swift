@@ -1349,7 +1349,7 @@ var Gestures=(function(){
     // ── TOUCH ──
     appContainer.addEventListener("touchstart",function(e){
       var fromNewCardInput=State.adding&&e.target.closest(".new-card")&&isInteractive(e.target);
-      if(!fromNewCardInput&&isInteractive(e.target))return;
+      if(!fromNewCardInput&&isInteractive(e.target)&&!e.target.closest("#addBtn"))return;
       cancelMomentum();cancelBounce();
       var t=e.touches[0];
       g={active:true,pulling:false,startX:t.clientX,startY:t.clientY,lastX:t.clientX,
@@ -1475,7 +1475,7 @@ var Gestures=(function(){
     // ── MOUSE ──
     appContainer.addEventListener("mousedown",function(e){
       var fromNewCardInput=State.adding&&e.target.closest(".new-card")&&isInteractive(e.target);
-      if(!fromNewCardInput&&isInteractive(e.target))return;
+      if(!fromNewCardInput&&isInteractive(e.target)&&!e.target.closest("#addBtn"))return;
       cancelMomentum();cancelBounce();
       g={active:true,pulling:false,startX:e.clientX,startY:e.clientY,lastX:e.clientX,
          axis:null,mouse:true,pullVal:0,scrollStart:scrollEl.scrollLeft,
