@@ -1,859 +1,385 @@
-<!DOCTYPE html>
+import { useState, useRef, useCallback, useEffect } from “react”;
 
-<html lang="tr">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <title>Son Dokunuş — Deductions</title>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <style>
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+const COLORS = [
+{ bg: “#7C3AED”, accent: “#A78BFA” },
+{ bg: “#E84545”, accent: “#FF8A8A” },
+{ bg: “#0EA5E9”, accent: “#7DD3FC” },
+{ bg: “#CA8A04”, accent: “#FDE047” },
+{ bg: “#10B981”, accent: “#6EE7B7” },
+{ bg: “#E11D9E”, accent: “#F9A8D4” },
+{ bg: “#6366F1”, accent: “#A5B4FC” },
+{ bg: “#EA580C”, accent: “#FDBA74” },
+];
+const W = 168, H = 124, R = 20, GAP = 12, SLOT = W + GAP;
+const TH = 68, MAX_PULL = 90;
 
-```
-:root {
-  --bg-deep: #0a0a0f;
-  --bg-surface: #131320;
-  --bg-surface-hover: #1a1a2c;
-  --text-primary: #e8e4dc;
-  --text-secondary: #9a9484;
-  --text-muted: #504e48;
-  --accent-gold: #c9a84c;
-  --accent-gold-dim: rgba(201, 168, 76, 0.12);
-  --accent-red: #8b3a3a;
-  --accent-red-dim: rgba(139, 58, 58, 0.12);
-  --border: #252535;
-  --border-active: rgba(201, 168, 76, 0.5);
-  --font-serif: 'Playfair Display', Georgia, serif;
-  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+const rndColor = (used) => {
+const a = COLORS.filter(c => !used.includes(c.bg));
+const p = a.length ? a : COLORS;
+return p[Math.floor(Math.random() * p.length)];
+};
 
-  /* Golden ratio type scale: φ = 1.618 */
-  --fs-label: 0.56rem;     /* ÷φ from body — labels, eyebrows */
-  --fs-body: 0.9rem;       /* base — clue cards, deductions */
-  --fs-prose: 1.05rem;     /* ×√φ — story text */
-  --fs-chapter: 1.45rem;   /* ×φ — chapter titles */
-  --fs-display: 2.35rem;   /* ×φ² — title screen */
-}
+const Scratches = ({ a }) => (
+<svg style={{ position:“absolute”,inset:0,width:“100%”,height:“100%”,opacity:.12,pointerEvents:“none” }} viewBox=“0 0 200 140” preserveAspectRatio=“none”>
+{[[15,8,185,132,2.8],[35,3,195,118,2],[8,35,165,137,2.4],[55,0,198,95,1.6],[3,60,145,138,2.2],[75,2,197,78,1.4]].map(([x1,y1,x2,y2,w],i)=>
+<line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={a} strokeWidth={w} strokeLinecap="round"/>
+)}
+</svg>
+);
 
-html, body {
-  height: 100%;
-  overflow: hidden;
-  background: var(--bg-deep);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  overscroll-behavior: none;
-}
+const textClamp = {
+fontWeight:600, fontSize:15.5, color:”#fff”, lineHeight:1.22, letterSpacing:”-.01em”,
+display:”-webkit-box”, WebkitLineClamp:2, WebkitBoxOrient:“vertical”,
+overflow:“hidden”, textOverflow:“ellipsis”, wordBreak:“break-all”,
+};
 
-#app {
-  max-width: 480px;
-  margin: 0 auto;
-  height: 100dvh;
-  height: 100vh;
-  position: relative;
-  overflow: hidden;
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-}
+function Card({ todo, onDone, onRename, removing }) {
+const [stage, setStage] = useState(0);
+const [editing, setEditing] = useState(false);
+const editRef = useRef(null);
 
-#app::before {
-  content: '';
-  position: fixed; inset: 0; z-index: 100;
-  pointer-events: none; opacity: 0.035;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 128px 128px;
-}
+useEffect(() => {
+if (!removing) return;
+requestAnimationFrame(() => setStage(1));
+const t = setTimeout(() => setStage(2), 280);
+return () => clearTimeout(t);
+}, [removing]);
 
-#app::after {
-  content: '';
-  position: fixed; inset: 0; z-index: 99;
-  pointer-events: none;
-  background: radial-gradient(ellipse at 50% 50%, transparent 50%, rgba(0,0,0,0.4) 100%);
-}
+const onEnd = useCallback((e) => {
+if (stage === 2 && e.propertyName === “width”) onDone(todo.id, true);
+}, [stage, onDone, todo.id]);
 
-.screen { display: none; flex-direction: column; height: 100%; }
-.screen.active { display: flex; }
+useEffect(() => {
+if (editing && editRef.current) {
+editRef.current.focus();
+editRef.current.setSelectionRange(0, editRef.current.value.length);
+}
+}, [editing]);
 
-/* ═══════ TITLE ═══════ */
-#screen-title {
-  justify-content: center; align-items: center; text-align: center;
-  padding: 2rem;
-  animation: fadeIn 1.5s ease;
-  background: radial-gradient(ellipse at 50% 38%, #161628 0%, var(--bg-deep) 70%);
-}
-.eyebrow {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label); font-weight: 600;
-  letter-spacing: 0.3em; text-transform: uppercase;
-  color: var(--accent-gold); margin-bottom: 1rem;
-}
-#screen-title h1 {
-  font-family: var(--font-serif);
-  font-size: var(--fs-display); font-weight: 700;
-  line-height: 1.12; margin-bottom: 0.4rem;
-}
-#screen-title .subtitle {
-  font-family: var(--font-serif); font-style: italic;
-  font-size: var(--fs-body); color: var(--text-secondary);
-  margin-bottom: 3rem;
-}
-.btn-primary {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label); font-weight: 600;
-  letter-spacing: 0.12em; text-transform: uppercase;
-  color: var(--bg-deep); background: var(--accent-gold);
-  border: none; padding: 0.85rem 2rem; border-radius: 3px;
-  cursor: pointer;
-  transition: opacity 0.2s, transform 0.1s;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-.btn-primary:active { opacity: 0.8; transform: scale(0.97); }
+const commitEdit = useCallback(() => {
+const v = (editRef.current?.value ?? “”).trim();
+if (v && v !== todo.text) onRename(todo.id, v);
+setEditing(false);
+}, [todo.id, todo.text, onRename]);
 
-/* ═══════ GAME ═══════ */
-#screen-game { padding: 0; position: relative; }
-
-#story-panel {
-  padding: 0.9rem 1.15rem 0.65rem;
-  flex-shrink: 0;
-  max-height: 30vh;
-  overflow-y: auto;
-  scroll-behavior: smooth;
-  border-bottom: 1px solid var(--border);
-  -webkit-overflow-scrolling: touch;
-}
-#story-panel::-webkit-scrollbar { width: 2px; }
-#story-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-.scene-label {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label); font-weight: 600;
-  letter-spacing: 0.22em; text-transform: uppercase;
-  color: var(--accent-gold); margin-bottom: 0.45rem;
-}
-.story-text {
-  font-family: var(--font-serif);
-  font-size: var(--fs-prose); line-height: 1.7;
-  color: var(--text-primary);
-}
-.story-text .line {
-  display: inline;
-  opacity: 0; transition: opacity 0.5s ease;
-}
-.story-text .line.visible { opacity: 1; }
-
-.story-update {
-  display: block;
-  font-family: var(--font-serif); font-style: italic;
-  font-size: var(--fs-body); line-height: 1.55;
-  color: var(--text-secondary);
-  margin-top: 0.2rem; padding-left: 0.6rem;
-  border-left: 1px solid rgba(201,168,76,0.2);
-  opacity: 0; transform: translateY(4px);
-  transition: opacity 0.7s ease, transform 0.7s ease;
-}
-.story-update.visible { opacity: 1; transform: translateY(0); }
-
-/* Deduction panel */
-#deduction-panel {
-  max-height: 0; overflow: hidden;
-  transition: max-height 0.4s ease, padding 0.4s ease;
-  padding: 0 1.15rem; flex-shrink: 0;
-}
-#deduction-panel.show { max-height: 180px; padding: 0.55rem 1.15rem; }
-
-.deduction-box {
-  padding: 0.6rem 0.85rem; border-radius: 3px;
-  font-size: var(--fs-body); line-height: 1.6;
-  font-family: var(--font-serif);
-  overflow-y: auto;
-  max-height: 150px;
-}
-.deduction-box.correct {
-  background: rgba(201, 168, 76, 0.04);
-  border-left: 2px solid var(--accent-gold);
-  color: var(--text-primary);
-  animation: thoughtAppear 0.5s ease forwards;
-}
-.deduction-box.wrong {
-  background: var(--accent-red-dim);
-  border-left: 2px solid var(--accent-red);
-  color: var(--text-secondary);
-  animation: thoughtAppear 0.4s ease forwards;
-}
-
-/* ═══════ CLUES ═══════ */
-#clues-panel {
-  flex: 1; display: flex; gap: 0.5rem;
-  padding: 0.5rem 0.65rem;
-  overflow: hidden; min-height: 0;
-}
-.clue-column {
-  flex: 1; display: flex; flex-direction: column;
-  gap: 0.45rem;
-  min-height: 0;
-}
-
-.clue {
-  display: flex; align-items: center;
-  width: 100%;
-  flex: 1 1 0;
-  min-height: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-body); font-weight: 400;
-  line-height: 1.45;
-  color: var(--text-primary);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--border);
-  border-radius: 6px;
-  padding: 0.5rem 0.65rem;
-  cursor: pointer; text-align: left;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
-  transition: border-color 0.3s, background 0.3s, transform 0.15s,
-              opacity 0.5s ease, box-shadow 0.3s;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-  overflow: hidden;
-  word-break: break-word;
-}
-.clue:active:not(.locked) { transform: scale(0.97); }
-
-.clue.selected {
-  border-left-color: var(--accent-gold);
-  border-color: var(--border-active);
-  background: var(--accent-gold-dim);
-  box-shadow: 0 2px 12px rgba(0,0,0,0.3), 0 0 16px rgba(201,168,76,0.06);
-}
-.clue.matched {
-  border-left-color: var(--accent-gold);
-  border-color: var(--accent-gold);
-  box-shadow: 0 0 14px rgba(201,168,76,0.25);
-  background: rgba(201,168,76,0.08);
-}
-.clue.locked {
-  pointer-events: none;
-  background: rgba(10, 10, 15, 0.6);
-  border-color: rgba(37, 37, 53, 0.3);
-  border-left-color: rgba(37, 37, 53, 0.3);
-  box-shadow: none;
-}
-.clue.locked .clue-text {
-  display: none;
-}
-.clue.locked .clue-placeholder {
-  display: block;
-  color: var(--text-muted);
-  font-size: var(--fs-label);
-  letter-spacing: 0.15em;
-  opacity: 0.4;
-}
-.clue .clue-placeholder { display: none; }
-
-.clue.unlocking {
-  animation: unlockPulse 0.8s ease forwards;
-}
-.clue.shake { animation: shakeX 0.35s ease; }
-.clue.wrong-flash {
-  border-left-color: var(--accent-red);
-  background: var(--accent-red-dim);
-}
-
-/* ═══════ PROGRESS ═══════ */
-#progress-bar {
-  display: flex; align-items: center; justify-content: center;
-  gap: 0.3rem; padding: 0.55rem 1rem;
-  flex-shrink: 0; border-top: 1px solid var(--border);
-}
-.progress-chapter {
-  font-family: var(--font-serif);
-  font-size: calc(var(--fs-label) * 1.2); color: var(--accent-gold);
-  margin-right: 0.35rem; font-weight: 700;
-}
-.progress-pip {
-  width: 20px; height: 3px;
-  border-radius: 1.5px; background: var(--border);
-  transition: background 0.4s ease, box-shadow 0.4s ease;
-}
-.progress-pip.filled {
-  background: var(--accent-gold);
-  box-shadow: 0 0 5px rgba(201,168,76,0.3);
-}
-
-/* ═══════ SCENE FADE ═══════ */
-#scene-fade {
-  position: absolute; inset: 0;
-  background: #000; z-index: 10;
-  opacity: 0; pointer-events: none;
-  transition: opacity 0.8s ease;
-  display: flex; justify-content: center; align-items: center;
-}
-#scene-fade.active { opacity: 1; pointer-events: auto; }
-#scene-fade .chapter-title {
-  font-family: var(--font-serif);
-  font-size: var(--fs-chapter); color: var(--accent-gold);
-  opacity: 0; transition: opacity 0.8s ease;
-  text-align: center; padding: 0 2rem;
-}
-#scene-fade.show-title .chapter-title { opacity: 1; }
-
-/* ═══════ REVEAL ═══════ */
-#screen-reveal {
-  justify-content: flex-start; align-items: center;
-  text-align: center; padding: 2.5rem 1.5rem 2rem;
-  background: #000; animation: revealBg 2s ease forwards;
-  overflow-y: auto;
-}
-.reveal-label {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label); font-weight: 600;
-  letter-spacing: 0.3em; text-transform: uppercase;
-  color: var(--accent-gold); margin-bottom: 1.5rem;
-  opacity: 0; animation: fadeIn 1s ease 0.3s forwards;
-}
-#reveal-text {
-  font-family: var(--font-serif);
-  font-size: var(--fs-body); line-height: 1.8;
-  color: var(--text-primary);
-  max-width: 380px; text-align: left;
-}
-#reveal-text strong { color: var(--accent-gold); }
-#reveal-text p { margin-bottom: 0.9rem; }
-#btn-replay {
-  margin-top: 2rem; opacity: 0;
-  transition: opacity 0.6s ease; flex-shrink: 0;
-}
-#btn-replay.show { opacity: 1; }
-
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes thoughtAppear {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes shakeX {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-3px); }
-  75% { transform: translateX(3px); }
-}
-@keyframes revealBg { from { background: #000; } to { background: var(--bg-deep); } }
-@keyframes unlockPulse {
-  0% { background: rgba(10,10,15,0.6); border-color: rgba(37,37,53,0.3); border-left-color: rgba(37,37,53,0.3); }
-  50% { border-color: var(--accent-gold); border-left-color: var(--accent-gold); background: rgba(201,168,76,0.06); }
-  100% { background: var(--bg-surface); border-color: var(--border); border-left-color: var(--border); }
-}
-```
-
-  </style>
-</head>
-<body>
-  <div id="app">
-    <div id="screen-title" class="screen active">
-      <div class="eyebrow">Deductions</div>
-      <h1>Son Dokunuş</h1>
-      <p class="subtitle">Bir yalı, bir restoratör, bir kış gecesi.</p>
-      <button class="btn-primary" onclick="startGame()">Soruşturmaya Başla</button>
-    </div>
-
-```
-<div id="screen-game" class="screen">
-  <div id="story-panel">
-    <div class="scene-label" id="scene-label"></div>
-    <div class="story-text" id="story-text"></div>
-    <div id="story-updates"></div>
-  </div>
-  <div id="deduction-panel">
-    <div class="deduction-box" id="deduction-box"></div>
-  </div>
-  <div id="clues-panel">
-    <div class="clue-column" id="col-left"></div>
-    <div class="clue-column" id="col-right"></div>
-  </div>
-  <div id="progress-bar"></div>
-  <div id="scene-fade"><span class="chapter-title" id="chapter-title-text"></span></div>
+return (
+<div onTransitionEnd={onEnd} style={{
+width: stage===2 ? 0 : SLOT, overflow:“hidden”, flexShrink:0,
+transition: stage===2 ? “width .32s cubic-bezier(.4,0,.2,1)” : “none”,
+}}>
+<div style={{
+width:W, height:H, borderRadius:R, marginRight:GAP,
+background:todo.color.bg, position:“relative”, overflow:“hidden”,
+opacity: stage>=1 ? 0 : 1,
+transform: stage===1 ? “scale(.8) translateY(-6px)” : “scale(1)”,
+transition: stage===1 ? “opacity .28s ease, transform .28s cubic-bezier(.4,0,.2,1)” : “none”,
+}}>
+<Scratches a={todo.color.accent}/>
+<div style={{ position:“relative”,zIndex:1,padding:“12px 14px”,height:“100%”,display:“flex”,flexDirection:“column”,justifyContent:“space-between” }}>
+<div style={{ display:“flex”,justifyContent:“flex-end” }}>
+<button onClick={e=>{e.stopPropagation();onDone(todo.id)}} style={{
+width:26,height:26,borderRadius:“50%”,border:“2px solid rgba(255,255,255,.28)”,
+background:“rgba(255,255,255,.08)”,display:“flex”,alignItems:“center”,justifyContent:“center”,
+cursor:“pointer”,padding:0,transition:“background .15s,border-color .15s”,
+}}
+onPointerEnter={e=>{e.currentTarget.style.background=“rgba(255,255,255,.25)”;e.currentTarget.style.borderColor=“rgba(255,255,255,.5)”}}
+onPointerLeave={e=>{e.currentTarget.style.background=“rgba(255,255,255,.08)”;e.currentTarget.style.borderColor=“rgba(255,255,255,.28)”}}
+>
+<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+</button>
 </div>
-
-<div id="screen-reveal" class="screen">
-  <div class="reveal-label">Sonuç</div>
-  <div id="reveal-text"></div>
-  <button class="btn-primary" id="btn-replay" onclick="resetGame()">Yeniden Oyna</button>
+{editing ? (
+<input ref={editRef} type=“text” inputMode=“text” enterKeyHint=“done”
+autoComplete=“off” autoCorrect=“off” defaultValue={todo.text}
+onKeyDown={e=>{if(e.key===“Enter”){e.preventDefault();commitEdit()}if(e.key===“Escape”)setEditing(false)}}
+onBlur={()=>setTimeout(commitEdit,150)}
+style={{ fontWeight:600,fontSize:15.5,color:”#fff”,lineHeight:1.22,letterSpacing:”-.01em”,
+background:“rgba(0,0,0,.15)”,border:“none”,borderRadius:6,outline:“none”,
+padding:“2px 4px”,margin:”-2px -4px”,width:“calc(100% + 8px)”,caretColor:”#fff”,fontFamily:“inherit” }}
+/>
+) : (
+<div onClick={e=>{e.stopPropagation();setEditing(true)}} style={{…textClamp,cursor:“text”}}>
+{todo.text}
 </div>
-```
+)}
+</div>
+</div>
+</div>
+);
+}
 
-  </div>
+function NewCard({ color, onAdd, onCancel }) {
+const inputRef = useRef(null);
+const submitted = useRef(false);
 
-<script>
-const SCENES = [
-  {
-    title: "Bölüm I — Atölye",
-    story: "Profesör Kerem Arslantürk, kış gecesinin sonunda yalısının atölyesinde ölü bulundu. Masasında yarım kalmış bir restorasyon, yanında soğumuş bir çay. İlk bulgular kalp krizine işaret ediyor.",
-    left: [
-      "Çay bardağının kulpu sola dönük",
-      "Masadaki büyütecin odağı son ayarında kalmış",
-      "Kerem'in son notu: \"Pigment 47 — kontrol et, İ.S.\"",
-      "Atölyede iki farklı ayakkabı izi — 42 ve 37 numara",
-      "Otopsi: \"Kalp krizi ile uyumlu\" — toksikoloji bekliyor"
-    ],
-    right: [
-      "Kerem sağ elini kullanırdı",
-      "Büyüteç altında 19. yüzyıl sentetik pigmenti görünüyor",
-      "UV lambası hâlâ açık, tabloya doğrultulmuş",
-      "Kerem'in ayakkabı numarası 44",
-      "Konvallatoksin, kalp krizini birebir taklit eder"
-    ],
-    matches: [
-      { l:0, r:0,
-        text:"Kulp sola dönük — Kerem sağlak. Bardağı tutan kişi solaktı, kulpu kendi alışkanlığıyla çevirmiş. Bu çayı Kerem koymadı.",
-        storyUpdate:"Çayı o gece başka biri hazırlamış — ve o kişi solak." },
-      { l:1, r:1,
-        text:"Büyüteç maksimum odakta — Kerem son gördüğü şeye kilitlenmiş. Altında 17. yüzyılda var olamayacak sentetik pigment. Bu 'Osmanlı minyatürü' sahte.",
-        storyUpdate:"Kerem o gece tablonun sahte olduğunu keşfetmiş." },
-      { l:2, r:2, requires:1,
-        text:"Sahteliği keşfettikten sonra UV'e geçmiş — doğrulama arıyordu. Notundaki 'İ.S.' bir isim: İlhan Soylu. Kerem sahtekârı tanıyordu.",
-        storyUpdate:"Notlarındaki 'İ.S.' — eski öğrencisi İlhan Soylu'yu işaret ediyor." },
-      { l:3, r:3,
-        text:"42 ve 37 numara — ikisi de Kerem'in 44'üne ait değil. Bir erkek, bir kadın. O gece atölyeye iki kişi girmiş. Tek kişinin işi değil bu.",
-        storyUpdate:"O gece atölyeye iki kişi gelmiş — bir erkek, bir kadın. Ortaklık." },
-      { l:4, r:4,
-        text:"Otopsi kalp krizi diyor — ama konvallatoksin tam olarak bunu taklit eder ve standart panelde aranmaz. Biri, tespit edilmesi neredeyse imkânsız bir zehir seçmiş.",
-        storyUpdate:"Bu kalp krizi değil. Kerem nadir bir bitkisel zehirle öldürülmüş." }
-    ],
-    wrongs: {
-      "0-1":"Bardağın kulpu kimin koyduğuyla, büyüteçteki pigment tablonun gerçekliğiyle ilgili.",
-      "0-4":"Bardağın yönü zehrin türüyle değil, onu koyan kişiyle ilgili.",
-      "1-2":"Büyüteç ve UV farklı araçlar — büyüteç pigmenti gösterdi, UV başka bir şeyi.",
-      "2-0":"Not ile bardağın kulpu farklı ipuçlarına ait.",
-      "3-0":"Ayak izleri el tercihiyle değil, ziyaretçi sayısıyla ilgili.",
-      "4-1":"Toksikoloji pigmentle değil, zehir kimyasıyla eşleşiyor."
-    },
-    wrongFallback:"Bu iki ipucu farklı sorulara cevap veriyor."
-  },
+useEffect(() => {
+const el = inputRef.current;
+if (!el) return;
+// Aggressive multi-attempt focus for mobile keyboard
+el.focus();
+el.click();
+const attempts = [16, 50, 100, 200, 350, 500].map(ms =>
+setTimeout(() => { if(inputRef.current) { inputRef.current.focus(); inputRef.current.click(); } }, ms)
+);
+return () => attempts.forEach(clearTimeout);
+}, []);
 
-  {
-    title: "Bölüm II — Son Akşam",
-    story: "O akşam Kerem beş kişiyi yemeğe çağırmıştı. Kütüphanede uzun bir masa, gergin bir sessizlik. 'Bu gece önemli bir açıklama yapacağım' demişti.",
-    left: [
-      "Kerem açıklamasını yapamadan elektrikler kesildi",
-      "Elektrik kesildiğinde Canan masada değildi",
-      "Doğan, Kerem'e sakin bir sesle \"tabloyu acele ettirmeyelim\" dedi",
-      "Canan: \"Çayınızı ben getireyim, hocam\"",
-      "Atölyedeki duvar saati 22:47'de durmuş — Kerem düşerken çarpmış"
-    ],
-    right: [
-      "Sigorta kutusu dışarıda, iskelenin yanında — içeriden erişilemez",
-      "Sigortaya giden tek yol seradan geçiyor",
-      "Doğan'ın telefonunda İlhan'a: \"Her şeyi biliyor. Bu gece.\"",
-      "Mutfak defterinde o akşam papatya çayı hazırlandığı yazıyor",
-      "Konvallatoksin vücutta 2–3 saatte etkisini gösterir"
-    ],
-    matches: [
-      { l:0, r:0,
-        text:"Tam açıklama yapacakken elektrikler gitti. Sigorta kutusu dışarıda, iskelenin yanında — içeriden kimse erişemez. Birisi dışarı çıkıp sigortayı indirdi. Bu sabotajdı.",
-        storyUpdate:"Kerem'in açıklaması kasıtlı olarak engellendi." },
-      { l:1, r:1, requires:0,
-        text:"Sigortayı indirmek için dışarı çıkmak gerekiyordu. Canan o sırada masada yoktu — ve sigortaya giden tek yol seradan geçiyor. O yolu bilen tek kişi Canan.",
-        storyUpdate:"Elektriği kesen Canan — sera yoluyla sigorta kutusuna ulaşmıştı." },
-      { l:2, r:2,
-        text:"Doğan masada sakindi — 'acele etmeyelim' derken zaman kazanıyordu. Ama telefonundaki mesaj panik dolu: 'Her şeyi biliyor. Bu gece.' Sahnedeki sakinlik bir maskeydi.",
-        storyUpdate:"Doğan, Kerem'in keşfini biliyordu. İlhan'ı o gece uyardı." },
-      { l:3, r:3,
-        text:"Canan çay teklif etti — sıradan bir nezaket. Ama mutfak defterine göre o akşam papatya çayı hazırlanmış. Papatyanın yoğun aroması, acı bir maddenin tadını gizlemek için ideal seçim.",
-        storyUpdate:"Canan çayı bizzat hazırladı. Papatya seçimi zehrin tadını gizliyordu." },
-      { l:4, r:4,
-        text:"Saat 22:47'de durmuş — Kerem düşerken çarpmış. Yemek 20:00'da. Konvallatoksin 2–3 saatte etki eder. Zehir yemeğin hemen ardından verilmiş olmalı.",
-        storyUpdate:"Zaman çizelgesi tutarlı: zehir ~20:00'da verildi, 22:47'de Kerem yere yığıldı." }
-    ],
-    wrongs: {
-      "0-2":"Elektrik kesintisi ile Doğan'ın mesajı ilişkili ama doğrudan eşleşmeleri farklı.",
-      "1-0":"Canan'ın yokluğu ile sigorta kutusu bağlantılı ama sera yolu daha spesifik.",
-      "2-0":"Doğan'ın sözleri ile sigorta kutusu farklı kişilerin eylemlerine ait.",
-      "3-1":"Çay teklifi ile sera yolu farklı olaylara ait — biri zehir, diğeri sabotaj.",
-      "3-4":"Çay ile saat bağlantılı ama eşleşmeleri farklı.",
-      "4-2":"Zaman çizelgesi ile Doğan'ın mesajı farklı bilgileri ortaya çıkarıyor."
-    },
-    wrongFallback:"Çekici bir bağlantı ama bu iki ipucu farklı olayları aydınlatıyor."
-  },
+const submit = useCallback(() => {
+if (submitted.current) return;
+submitted.current = true;
+const v = (inputRef.current?.value ?? “”).trim();
+if (v) onAdd(v); else onCancel();
+}, [onAdd, onCancel]);
 
-  {
-    title: "Bölüm III — Sahte Renkler",
-    story: "Soruşturma tablonun arkasına uzanıyor. Kerem'in arşivi, yıllar süren sistematik bir sahtekârlığı katman katman açığa çıkarıyor.",
-    left: [
-      "Tablonun arkasında UV'de görünen gizli \"İ.S.\" monogramı",
-      "Canan'ın doktora tezi: \"Osmanlı Pigmentlerinin Spektral Analizi\"",
-      "Mediha'nın kasasında Doğan'dan yıllık \"bağış\" makbuzları",
-      "Kerem son hafta üç kez İnterpol Sanat Suçları'nı aramış",
-      "Doğan'ın koleksiyonunun sigorta değeri: 40 milyon euro"
-    ],
-    right: [
-      "İlhan Soylu tüm sahte eserlerine gizli monogram koyar",
-      "Tez danışmanı Kerem, ama veri kaynağı İlhan'ın atölyesi",
-      "\"Bağış\" miktarları yalının bakım masrafıyla kuruşuna örtüşüyor",
-      "İnterpol: \"Resmi başvuru için somut belge gerekiyor\"",
-      "Sigorta şirketi geçen ay \"bağımsız doğrulama\" talep etmiş"
-    ],
-    matches: [
-      { l:0, r:0,
-        text:"Tablonun arkasındaki gizli monogram — İlhan'ın imzası. Her sahte eserine koyarmış. Ego yüzünden kendi işini işaretlemiş, Kerem'in görmeyeceğini sanmış. Yanılmış.",
-        storyUpdate:"Sahte tabloyu yapan kesinleşti: İlhan Soylu. Monogramı onu ele verdi." },
-      { l:1, r:1,
-        text:"Canan'ın tezi Kerem danışmanlığında ama verileri İlhan'ın atölyesinden. Hangi pigmentin hangi dönemde kullanılacağını haritalıyordu — sahtekârlığın teknik reçetesi.",
-        storyUpdate:"Canan'ın doktora tezi, sahtekârlık operasyonunun teknik kılavuzuydu." },
-      { l:2, r:2,
-        text:"Doğan yıllarca Mediha'ya 'bağış' göndermiş — miktar, yalının bakım masrafıyla kuruşuna örtüşüyor. Hayırseverlik değil, susma parası. Mediha yıllardır biliyordu.",
-        storyUpdate:"Mediha yıllardır her şeyi biliyormuş. Doğan'ın 'bağışları' susma parasıydı." },
-      { l:3, r:3, requires:0,
-        text:"Kerem İnterpol'e gitmiş ama 'somut belge gerekiyor' demişler. Ertesi gün başvuracaktı — açıklamayı o akşama koymasının sebebi buydu. Katil için son şans o geceydi.",
-        storyUpdate:"Kerem ertesi sabah İnterpol'e başvuracaktı. Katil için zaman doluyordu." },
-      { l:4, r:4,
-        text:"40 milyon euroluk koleksiyon — ama sigorta şirketi doğrulama istiyor. Tablolar sahte çıkarsa Doğan sadece parasını değil, sigorta dolandırıcılığından özgürlüğünü kaybedecek.",
-        storyUpdate:"Doğan'ın 40 milyon euroluk koleksiyonu çökmek üzere — motifi bu." }
-    ],
-    wrongs: {
-      "0-1":"Monogram İlhan'ın kimliğini, tez Canan'ın rolünü ortaya çıkarıyor — farklı kişiler.",
-      "1-0":"Tez ile monogram alışkanlığı farklı kanıt zincirlerine ait.",
-      "2-3":"Mediha'nın susma parası ile İnterpol süreci farklı hikâyeler.",
-      "3-4":"İnterpol başvurusu ile sigorta krizi ilişkili ama eşleşmeleri farklı.",
-      "4-2":"Sigorta değeri ile Mediha'nın kasası farklı kişilerin rollerini gösteriyor."
-    },
-    wrongFallback:"İkisi de operasyonla ilgili ama farklı parçaları aydınlatıyor."
-  },
+return (
+<div style={{
+width:W,height:H,borderRadius:R,marginRight:GAP,
+background:color.bg,position:“relative”,overflow:“hidden”,flexShrink:0,
+animation:“popIn .26s cubic-bezier(.34,1.56,.64,1) both”,
+}}>
+<Scratches a={color.accent}/>
+<div style={{ position:“relative”,zIndex:1,padding:“12px 14px”,height:“100%”,display:“flex”,flexDirection:“column”,justifyContent:“flex-end” }}>
+<input ref={inputRef} type=“text” inputMode=“text” enterKeyHint=“done”
+autoFocus autoComplete=“off” autoCorrect=“off” spellCheck=“false”
+placeholder=“Görev adı…”
+onKeyDown={e=>{if(e.key===“Enter”){e.preventDefault();submit()}if(e.key===“Escape”)onCancel()}}
+onBlur={()=>setTimeout(submit,250)}
+style={{ fontWeight:600,fontSize:16,color:”#fff”,lineHeight:1.22,letterSpacing:”-.01em”,
+background:“transparent”,border:“none”,outline:“none”,padding:0,margin:0,width:“100%”,
+caretColor:”#fff”,fontFamily:“inherit” }}
+/>
+</div>
+</div>
+);
+}
 
-  {
-    title: "Bölüm IV — Zehrin İzi",
-    story: "Toksikoloji raporu kesinleşti: konvallatoksin. Nadir, bitkisel, neredeyse iz bırakmaz. İz sürüldükçe yalının serası ve bir doktora öğrencisinin botanik bilgisi ön plana çıkıyor.",
-    left: [
-      "Serada Convallaria majalis saksısı — toprak taze kazılmış",
-      "Canan'ın telefonunda İlhan'a: \"Konsantrasyon ne kadar olsun?\"",
-      "Canan ve İlhan'ın 8 aydır ortak kiralık dairesi var",
-      "Kaptan Hasan'ın cebinde 50.000 TL nakit",
-      "Canan'ın bilgisayarında silinen arama: \"convallatoxin detection post-mortem\""
-    ],
-    right: [
-      "Bitkinin kökü ve yaprakları kesilmiş — en zehirli kısımlar alınmış",
-      "İlhan'ın yanıtı: \"67 kg için hesapla. Kesin olsun.\"",
-      "Daire, İlhan'ın eski atölyesinin bulunduğu binada",
-      "Banknotların seri numaraları İlhan'ın hesabından çekilmiş parayla eşleşiyor",
-      "Aramanın tarihi: cinayetten tam iki hafta önce"
-    ],
-    matches: [
-      { l:0, r:0,
-        text:"Vadinin Zambağı — kökü ve yaprakları, en zehirli kısımları kesilmiş. Toprak taze kazılmış. Zehir dışarıdan gelmedi, yalının kendi serasından hazırlandı.",
-        storyUpdate:"Zehrin kaynağı yalının serası. Bitkinin en zehirli kısımları kasıtlı olarak alınmış." },
-      { l:1, r:1, requires:0,
-        text:"'Konsantrasyon ne kadar olsun?' — '67 kilo için hesapla. Kesin olsun.' Kerem'in tam kilosu. İlhan ne az ne çok, öldürücü dozu hesaplattı. Emri veren o.",
-        storyUpdate:"İlhan, dozajı Kerem'in kilosuna göre hesaplattı. Cinayet emri ondan." },
-      { l:2, r:2,
-        text:"8 aydır birlikte yaşıyorlar — ve daire İlhan'ın eski atölyesiyle aynı binada. Sadece mesleki bir ilişki değil bu. Canan'ın motivasyonu paradan daha derin: bağlılık.",
-        storyUpdate:"Canan ile İlhan'ın gizli ilişkisi 8 aylık. Motivasyonu aşk." },
-      { l:3, r:3,
-        text:"Hasan'ın cebindeki 50.000 TL — seri numaraları İlhan'ın hesabından çekilenlerle eşleşiyor. O gece İlhan'ın geldiğini görmüş ama 'erken uyudum' demiş. Tanıklığı satın alınmış.",
-        storyUpdate:"Kaptan Hasan, İlhan tarafından 50.000 TL'ye susturulmuştu." },
-      { l:4, r:4,
-        text:"Cinayetten iki hafta önce 'konvallatoksinin otopside tespit edilip edilemeyeceğini' aramış. Sonra silmiş. Anlık bir karar değil — haftalarca planlanan soğukkanlı bir hesap.",
-        storyUpdate:"Cinayet iki hafta öncesinden planlanmıştı." }
-    ],
-    wrongs: {
-      "0-1":"Bitkinin kesilmesi zehrin kaynağını, İlhan'ın mesajı emri veren kişiyi gösteriyor.",
-      "1-0":"Dozaj hesabı ile bitkinin durumu farklı kanıtlar.",
-      "2-3":"Canan-İlhan ilişkisi ile Hasan'ın susturulması farklı zincirler.",
-      "3-2":"Banknotlar İlhan-Hasan bağını, daire İlhan-Canan bağını gösteriyor.",
-      "4-1":"Silinen arama ile dozaj mesajı farklı hazırlık adımları."
-    },
-    wrongFallback:"Her ikisi de zehir izine ait ama farklı bağlantıları ortaya çıkarıyor."
-  },
+function dampedPull(rawDx) {
+const l = rawDx * 0.55;
+return l <= MAX_PULL ? l : MAX_PULL + (l - MAX_PULL) * 0.15;
+}
 
-  {
-    title: "Bölüm V — Hakikat",
-    story: "Tüm izler birleşiyor. Sahtekârlık, ihanet, susma ve cinayet — herkesin rolü son parçalarıyla netleşmek üzere.",
-    left: [
-      "Güvenlik kamerası: İlhan, gece 21:30'da iskelede",
-      "İlhan atölyeye girdiğinde Kerem zaten bilinçsizmiş",
-      "Doğan'ın İlhan'a son mesajı: \"Temiz mi?\"",
-      "Kerem'in atölyesinde gizli ses kaydı cihazı — aktive edilmiş",
-      "Tüm kanıtlar toplanmış, dosya savcılığa hazır"
-    ],
-    right: [
-      "İlhan'ın resmi ifadesi: \"O gece İstanbul'da bile değildim\"",
-      "İlhan'ın eldivenlerinde Kerem'in gözlüğüne ait cam kırıkları",
-      "İlhan'ın yanıtı: \"Kalp krizi. Kimse anlamayacak.\"",
-      "Kayıtta Kerem'in son sözleri: \"Bunu sana emanet ediyorum, Zeynep.\"",
-      "Zeynep'in ses kaydını savcılığa teslim ettiği tutanak"
-    ],
-    matches: [
-      { l:0, r:0,
-        text:"Kamera 21:30'da İlhan'ı iskelede gösteriyor. İfadesinde 'İstanbul'da bile değildim' demiş. Kamera yalan söylemez.",
-        storyUpdate:"İlhan o gece yalıdaydı. Kamera kaydı yalanını çürütüyor." },
-      { l:1, r:1, requires:0,
-        text:"İlhan geldiğinde Kerem çoktan yere yığılmıştı. Ama eldivenlerinde Kerem'in gözlüğüne ait cam kırıkları — sahneyi düzenledi. Gözlüğü aldı, belgeleri kontrol etti, her şeyi 'doğal ölüm' gibi kurguladı.",
-        storyUpdate:"İlhan olay yerini 'kalp krizi' görüntüsüne büründürdü." },
-      { l:2, r:2,
-        text:"'Temiz mi?' — 'Kalp krizi. Kimse anlamayacak.' Üçlü zincirin son teyidi. Doğan emir, İlhan planlama, Canan uygulama.",
-        storyUpdate:"Mesajlaşma üçlü zinciri kesinleştiriyor: Doğan, İlhan, Canan." },
-      { l:3, r:3,
-        text:"Kerem bir ses kaydı bırakmış. Son sözleri kızına: 'Bunu sana emanet ediyorum, Zeynep.' Başına gelebilecekleri hissetmişti. Mirası intikam değil, emanetti.",
-        storyUpdate:"Kerem tehlikeyi hissetmişti. Kızına gerçeği emanet etti." },
-      { l:4, r:4, requires:3,
-        text:"Zeynep başlangıçta belgeleri kendi çıkarı için kullanmayı düşünmüştü. Ama babasının sesini dinlediğinde her şey değişti. Kaydı savcılığa teslim etti. Son dokunuş, bir kızın sadakatiydi.",
-        storyUpdate:"Zeynep emaneti savcılığa teslim etti. Son dokunuş — sadakat." }
-    ],
-    wrongs: {
-      "0-1":"Kamera İlhan'ın orada olduğunu, eldivenler ne yaptığını gösteriyor — farklı anlar.",
-      "2-1":"Mesajlaşma ile cam kırıkları farklı eylemlere ait.",
-      "3-4":"Ses kaydı ile savcılık tutanağı sıralı — önce kayıt, sonra teslim.",
-      "4-0":"Dosyanın tamamlanması ile kamera kaydı farklı eşleşmelere ait."
-    },
-    wrongFallback:"Bu iki ipucu farklı son parçaları bir araya getiriyor."
-  }
+const INIT = [
+{ id:1, text:“Vergi beyannamesi hazırla”, color:COLORS[0] },
+{ id:2, text:“Danıştay kararlarını incele”, color:COLORS[1] },
+{ id:3, text:“Blog yazısı taslağı”, color:COLORS[2] },
+{ id:4, text:“Müvekkil toplantı notu”, color:COLORS[3] },
+{ id:5, text:“Qdrant index güncelle”, color:COLORS[4] },
 ];
 
-const REVEAL_TEXT = `<p>Kerem Arslantürk'ü öldüren üç kişilik bir zincirdi.</p>
-<p><strong>Doğan Kıray</strong> — 15 yıldır sahte tabloları orijinal diye satan, 40 milyon euroluk bir imparatorluğun sahibi. Kerem'in İnterpol'e başvuracağını öğrenince emri verdi.</p>
-<p><strong>İlhan Soylu</strong> — Kerem'in eski öğrencisi, sahte tabloların yaratıcısı. Dozajı hesaplattı, o gece yalıya gizlice gelip sahneyi 'kalp krizi' olarak düzenledi. Her sahte tabloya koyduğu monogram — sonu oldu.</p>
-<p><strong>Canan Demirtaş</strong> — İlhan'ın sevgilisi, Kerem'in asistanı. Seradaki Vadinin Zambağı'ndan konvallatoksin özütü hazırladı, papatya çayına karıştırdı. İki hafta öncesinden zehrin tespit edilip edilemeyeceğini araştırmıştı.</p>
-<p>Mediha yıllardır biliyordu ama sustu — Doğan'ın paraları yalının bakımını karşılıyordu. Kaptan Hasan, parayla susturuldu.</p>
-<p>Zeynep başlangıçta belgeleri kendi çıkarı için kullanmayı düşünmüştü. Ama babasının ses kaydını dinlediğinde her şey değişti.</p>
-<p>Kerem, ölümünden önce bir kayıt bırakmıştı. Son sözleri kızınaydı:</p>
-<p><strong>"Bunu sana emanet ediyorum, Zeynep."</strong></p>
-<p>Ve Zeynep, son dokunuşu yaptı.</p>`;
+export default function App() {
+const [todos, setTodos] = useState(INIT);
+const [nid, setNid] = useState(6);
+const [adding, setAdding] = useState(false);
+const [newCol, setNewCol] = useState(null);
+const [removingSet, setRemovingSet] = useState(new Set());
 
+const scrRef = useRef(null);
+const trackRef = useRef(null);
+const indicatorRef = useRef(null);
+const todosRef = useRef(todos);
+todosRef.current = todos;
+const addingRef = useRef(false);
 
-// ═══════ ENGINE ═══════
-const S = { scene:0, selLeft:null, solved:[[],[],[],[],[]], animating:false, rightOrder:[], storyUpdates:[[],[],[],[],[]] };
-const $ = id => document.getElementById(id);
+const g = useRef({ active: false });
 
-function shuffle(a) {
-  const b=[...a]; for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];} return b;
+const updateIndicator = (pullVal) => {
+const el = indicatorRef.current;
+if (!el) return;
+const p = Math.min(pullVal / TH, 1);
+const on = p > 0.85;
+const s = 0.3 + p * 0.7;
+el.style.opacity = String(Math.min(p * 1.5, 1));
+el.style.transform = `translateX(${Math.min(pullVal - 56, 4)}px) scale(${s})`;
+const icon = el.querySelector(”.pull-icon”);
+if (icon) { icon.style.transform = `rotate(${p*90}deg)`; icon.style.color = on ? “#A78BFA” : “rgba(255,255,255,.5)”; }
+el.style.borderColor = on ? “rgba(167,139,250,.6)” : “rgba(255,255,255,.15)”;
+el.style.background = on ? “rgba(124,58,237,.25)” : “rgba(255,255,255,.05)”;
+};
+
+const resetVisuals = () => {
+if (trackRef.current) { trackRef.current.style.transform = “”; trackRef.current.style.transition = “transform .3s cubic-bezier(.25,1,.5,1)”; }
+if (indicatorRef.current) { indicatorRef.current.style.opacity = “0”; indicatorRef.current.style.transform = “translateX(-56px) scale(.3)”; }
+};
+
+const doAdd = useCallback(() => {
+if (addingRef.current) return;
+addingRef.current = true;
+const c = rndColor(todosRef.current.map(t => t.color.bg));
+setNewCol(c);
+setAdding(true);
+}, []);
+
+/* ── Touch ── */
+useEffect(() => {
+const el = scrRef.current;
+if (!el) return;
+const onStart = (e) => {
+if (e.target.closest(“button”) || e.target.closest(“input”)) return;
+const t = e.touches[0];
+g.current = { active:true, pulling:false, startX:t.clientX, startY:t.clientY, axis:null };
+};
+const onMove = (e) => {
+const gs = g.current;
+if (!gs.active) return;
+const t = e.touches[0];
+const dx = t.clientX - gs.startX, dy = t.clientY - gs.startY;
+if (!gs.axis) { if (Math.abs(dx)<4 && Math.abs(dy)<4) return; gs.axis = Math.abs(dx)>=Math.abs(dy)?“x”:“y”; }
+if (gs.axis === “y”) return;
+if (!gs.pulling && el.scrollLeft < 2 && dx > 4) gs.pulling = true;
+if (gs.pulling) {
+e.preventDefault();
+gs.pullVal = dampedPull(Math.max(0, dx));
+if (trackRef.current) { trackRef.current.style.transform = `translateX(${gs.pullVal}px)`; trackRef.current.style.transition = “none”; }
+updateIndicator(gs.pullVal);
 }
+};
+const onEnd = () => {
+const gs = g.current;
+if (!gs.active) return;
+if (gs.pulling && (gs.pullVal||0) > TH) doAdd();
+resetVisuals();
+g.current = { active:false };
+};
+el.addEventListener(“touchstart”, onStart, { passive:true });
+el.addEventListener(“touchmove”, onMove, { passive:false });
+el.addEventListener(“touchend”, onEnd, { passive:true });
+el.addEventListener(“touchcancel”, onEnd, { passive:true });
+return () => { el.removeEventListener(“touchstart”,onStart); el.removeEventListener(“touchmove”,onMove); el.removeEventListener(“touchend”,onEnd); el.removeEventListener(“touchcancel”,onEnd); };
+}, [doAdd]);
 
-function showScreen(n) {
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  $('screen-'+n).classList.add('active');
+/* ── Mouse ── */
+const mDown = useCallback((e) => {
+if (e.target.closest(“button”) || e.target.closest(“input”)) return;
+g.current = { active:true, pulling:false, startX:e.clientX, axis:“x”, mouse:true, sl:scrRef.current?.scrollLeft||0 };
+e.preventDefault();
+}, []);
+
+useEffect(() => {
+const mv = (e) => {
+const gs = g.current;
+if (!gs.active || !gs.mouse) return;
+const dx = e.clientX - gs.startX;
+if (!gs.pulling && gs.sl < 2 && dx > 4) gs.pulling = true;
+if (gs.pulling) {
+gs.pullVal = dampedPull(Math.max(0, dx));
+if (trackRef.current) { trackRef.current.style.transform = `translateX(${gs.pullVal}px)`; trackRef.current.style.transition = “none”; }
+updateIndicator(gs.pullVal);
+} else if (scrRef.current) { scrRef.current.scrollLeft = gs.sl - dx; }
+};
+const up = () => {
+const gs = g.current;
+if (!gs.active || !gs.mouse) return;
+if (gs.pulling && (gs.pullVal||0) > TH) doAdd();
+resetVisuals();
+g.current = { active:false };
+};
+window.addEventListener(“mousemove”, mv);
+window.addEventListener(“mouseup”, up);
+return () => { window.removeEventListener(“mousemove”,mv); window.removeEventListener(“mouseup”,up); };
+}, [doAdd]);
+
+const add = useCallback((text) => {
+const c = newCol || rndColor(todos.map(t => t.color.bg));
+setTodos(p => [{ id:nid, text, color:c }, …p]);
+setNid(n => n+1);
+setAdding(false);
+setNewCol(null);
+addingRef.current = false;
+}, [newCol, todos, nid]);
+
+const cancelAdd = useCallback(() => {
+setAdding(false);
+setNewCol(null);
+addingRef.current = false;
+}, []);
+
+const handleDone = useCallback((id, actualRemove) => {
+if (actualRemove) {
+setTodos(p => p.filter(t => t.id !== id));
+setRemovingSet(s => { const n = new Set(s); n.delete(id); return n; });
+} else {
+setRemovingSet(s => new Set(s).add(id));
 }
+}, []);
 
-function startGame() {
-  S.scene=0; S.selLeft=null;
-  S.solved=[[],[],[],[],[]]; S.storyUpdates=[[],[],[],[],[]];
-  S.rightOrder=[]; for(let i=0;i<5;i++) S.rightOrder.push(shuffle([0,1,2,3,4]));
-  showScreen('game'); renderScene(); animateStory();
+const handleRename = useCallback((id, t) => {
+setTodos(p => p.map(x => x.id === id ? { …x, text: t } : x));
+}, []);
+
+return (
+<div style={{
+position:“fixed”, inset:0, background:”#000”,
+fontFamily:”-apple-system,‘SF Pro Rounded’,‘SF Pro Display’,BlinkMacSystemFont,sans-serif”,
+overflow:“hidden”,
+}}>
+<style>{`@keyframes popIn{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}} *::-webkit-scrollbar{display:none} *{scrollbar-width:none;-webkit-tap-highlight-color:transparent;box-sizing:border-box} input::placeholder{color:rgba(255,255,255,.3)} html,body{overflow:hidden!important;position:fixed!important;width:100%!important;height:100%!important;margin:0!important}`}</style>
+
+```
+  {/* Fixed top positioning — never moves with keyboard */}
+  <div style={{ position:"absolute", left:0, right:0, top: 100 }}>
+
+    <div style={{ padding:"0 20px", marginBottom:8, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+      <div>
+        <h1 style={{ fontSize:26, fontWeight:700, color:"#fff", margin:0, letterSpacing:"-.025em" }}>Görevler</h1>
+        <p style={{ fontSize:13.5, color:"rgba(255,255,255,.35)", margin:"3px 0 0", fontWeight:500 }}>
+          {todos.length===0 && !adding ? "Hepsini tamamladın!" : "← sola çek veya + ile ekle"}
+        </p>
+      </div>
+      {/* Tap-to-add button — guaranteed keyboard trigger on iOS */}
+      <button
+        onClick={doAdd}
+        style={{
+          width:36, height:36, borderRadius:12,
+          background:"rgba(255,255,255,.08)", border:"1px solid rgba(255,255,255,.15)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          cursor:"pointer", transition:"background .15s", flexShrink:0,
+        }}
+        onPointerEnter={e => e.currentTarget.style.background="rgba(255,255,255,.18)"}
+        onPointerLeave={e => e.currentTarget.style.background="rgba(255,255,255,.08)"}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.6)" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+    </div>
+
+    <div style={{ position:"relative", padding:"10px 0" }}>
+      {/* Pull indicator */}
+      <div ref={indicatorRef} style={{
+        position:"absolute", left:20, top:"50%", marginTop:-24, zIndex:0,
+        width:48, height:48, borderRadius:14,
+        border:"2px dashed rgba(255,255,255,.15)", background:"rgba(255,255,255,.05)",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        opacity:0, transform:"translateX(-56px) scale(.3)",
+        transition:"border-color .15s, background .15s", pointerEvents:"none",
+      }}>
+        <div className="pull-icon" style={{ color:"rgba(255,255,255,.5)", display:"flex", transition:"color .15s" }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </div>
+      </div>
+
+      <div ref={scrRef} onMouseDown={mDown} style={{
+        overflowX:"auto", overflowY:"hidden", WebkitOverflowScrolling:"touch",
+        position:"relative", zIndex:1, userSelect:"none", WebkitUserSelect:"none",
+      }}>
+        <div ref={trackRef} style={{ display:"flex", padding:"0 20px", transition:"transform .3s cubic-bezier(.25,1,.5,1)" }}>
+          {adding && <NewCard color={newCol||COLORS[0]} onAdd={add} onCancel={cancelAdd}/>}
+          {todos.map(todo => <Card key={todo.id} todo={todo} onDone={handleDone} onRename={handleRename} removing={removingSet.has(todo.id)}/>)}
+          {todos.length===0 && !adding && (
+            <div style={{ width:W,height:H,borderRadius:R,flexShrink:0,border:"2px dashed rgba(255,255,255,.08)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:6 }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.15)" strokeWidth="2" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <span style={{ fontSize:12, color:"rgba(255,255,255,.15)", fontWeight:600 }}>Harika!</span>
+            </div>
+          )}
+          <div style={{ width:20, flexShrink:0 }}/>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+);
 }
-
-function solvedMatchIndices(si) {
-  const sc=SCENES[si];
-  return S.solved[si].map(s => sc.matches.findIndex(m=>m.l===s.l&&m.r===s.r));
-}
-
-function getLockedClues(si) {
-  const sc=SCENES[si], smi=solvedMatchIndices(si);
-  const lL=new Set(), rL=new Set();
-  sc.matches.forEach((m,i)=>{
-    if(m.requires!==undefined && !smi.includes(m.requires)){
-      lL.add(m.l); rL.add(m.r);
-    }
-  });
-  return {lL,rL};
-}
-
-// Calculate reading time: ~2.5 words/sec for careful reader + buffer
-function readingTime(text) {
-  const words = text.split(/\s+/).length;
-  return Math.max(4500, words * 420 + 1800);
-}
-
-function renderScene() {
-  $('scene-label').textContent=SCENES[S.scene].title;
-  renderClues(); renderProgress(); renderStoryUpdates();
-}
-
-function animateStory() {
-  const sc=SCENES[S.scene], el=$('story-text');
-  const sents=sc.story.split('. ').map((s,i,a)=>i<a.length-1?s+'.':s);
-  el.innerHTML=sents.map(s=>`<span class="line">${s} </span>`).join('');
-  $('story-updates').innerHTML='';
-  el.querySelectorAll('.line').forEach((l,i)=>setTimeout(()=>l.classList.add('visible'),100*(i+1)));
-}
-
-function renderStoryUpdates() {
-  const c=$('story-updates'); c.innerHTML='';
-  S.storyUpdates[S.scene].forEach(t=>{
-    const d=document.createElement('div');
-    d.className='story-update visible'; d.textContent=t; c.appendChild(d);
-  });
-}
-
-function addStoryUpdate(text) {
-  S.storyUpdates[S.scene].push(text);
-  const d=document.createElement('div');
-  d.className='story-update'; d.textContent=text;
-  $('story-updates').appendChild(d);
-  requestAnimationFrame(()=>requestAnimationFrame(()=>d.classList.add('visible')));
-  setTimeout(()=>$('story-panel').scrollTo({top:$('story-panel').scrollHeight,behavior:'smooth'}),120);
-}
-
-function renderClues() {
-  const sc=SCENES[S.scene], solved=S.solved[S.scene], {lL,rL}=getLockedClues(S.scene);
-  renderCol('col-left',sc.left,'left',[0,1,2,3,4],solved,lL);
-  renderCol('col-right',sc.right,'right',S.rightOrder[S.scene],solved,rL);
-}
-
-function renderCol(colId,items,side,order,solved,lockedSet) {
-  const col=$(colId);
-  const prevLocked = col.dataset.locked ? new Set(col.dataset.locked.split(',').filter(x=>x).map(Number)) : new Set();
-  col.innerHTML='';
-
-  order.forEach(idx=>{
-    if(solved.some(m=>(side==='left'?m.l:m.r)===idx)) return;
-    const isLocked=lockedSet.has(idx);
-    const wasLocked=prevLocked.has(idx);
-    const btn=document.createElement('button');
-    btn.className='clue';
-    btn.dataset.side=side; btn.dataset.index=idx;
-
-    // Text span and placeholder span
-    const textSpan = document.createElement('span');
-    textSpan.className = 'clue-text';
-    textSpan.textContent = items[idx];
-
-    const placeholderSpan = document.createElement('span');
-    placeholderSpan.className = 'clue-placeholder';
-    placeholderSpan.textContent = '· · ·';
-
-    btn.appendChild(textSpan);
-    btn.appendChild(placeholderSpan);
-
-    if(isLocked) {
-      btn.classList.add('locked');
-    } else if(wasLocked) {
-      btn.classList.add('unlocking');
-    }
-    if(!isLocked && side==='left' && S.selLeft===idx) btn.classList.add('selected');
-    col.appendChild(btn);
-  });
-
-  col.dataset.locked = [...lockedSet].join(',');
-}
-
-function renderProgress() {
-  const bar=$('progress-bar'); bar.innerHTML='';
-  const ch=document.createElement('span');
-  ch.className='progress-chapter';
-  ch.textContent=['I','II','III','IV','V'][S.scene];
-  bar.appendChild(ch);
-  for(let i=0;i<5;i++){
-    const p=document.createElement('span');
-    p.className='progress-pip';
-    if(i<S.solved[S.scene].length) p.classList.add('filled');
-    bar.appendChild(p);
-  }
-}
-
-function showDeduction(t,type){
-  $('deduction-box').className='deduction-box '+type;
-  $('deduction-box').textContent=t;
-  $('deduction-panel').classList.add('show');
-}
-function hideDeduction(){$('deduction-panel').classList.remove('show');}
-function vibrate(p){try{navigator.vibrate?.(p);}catch(e){}}
-
-function handleTap(side,index) {
-  if(S.animating) return;
-  const sc=SCENES[S.scene], solved=S.solved[S.scene], {lL,rL}=getLockedClues(S.scene);
-  if(side==='left'&&lL.has(index)) return;
-  if(side==='right'&&rL.has(index)) return;
-  if(solved.some(m=>(side==='left'?m.l:m.r)===index)) return;
-
-  if(side==='left'){
-    S.selLeft=(S.selLeft===index)?null:index;
-    hideDeduction(); renderClues(); return;
-  }
-  if(S.selLeft===null) return;
-
-  const li=S.selLeft;
-  const match=sc.matches.find(m=>m.l===li&&m.r===index);
-
-  if(match){
-    S.animating=true; S.selLeft=null; vibrate(10);
-    const lc=document.querySelector(`.clue[data-side="left"][data-index="${li}"]`);
-    const rc=document.querySelector(`.clue[data-side="right"][data-index="${index}"]`);
-    if(lc){lc.classList.remove('selected');lc.classList.add('matched');}
-    if(rc) rc.classList.add('matched');
-
-    const showDelay = 500;
-    const readTime = readingTime(match.text);
-    const totalTime = showDelay + readTime;
-
-    setTimeout(()=>showDeduction(match.text,'correct'), showDelay);
-
-    setTimeout(()=>{
-      S.solved[S.scene].push({l:li,r:index});
-      addStoryUpdate(match.storyUpdate);
-      hideDeduction();
-      renderClues(); renderProgress();
-      S.animating=false;
-      if(S.solved[S.scene].length===5) onSceneComplete();
-    }, totalTime);
-  } else {
-    S.animating=true;
-    const key=`${li}-${index}`;
-    const explanation=sc.wrongs[key]||sc.wrongFallback;
-    vibrate([30,50,30]);
-    const lc=document.querySelector(`.clue[data-side="left"][data-index="${li}"]`);
-    const rc=document.querySelector(`.clue[data-side="right"][data-index="${index}"]`);
-    if(lc) lc.classList.add('shake','wrong-flash');
-    if(rc) rc.classList.add('shake','wrong-flash');
-    showDeduction(explanation,'wrong');
-
-    const wrongReadTime = Math.max(2500, readingTime(explanation) * 0.7);
-    setTimeout(()=>{
-      if(lc) lc.classList.remove('shake','wrong-flash');
-      if(rc) rc.classList.remove('shake','wrong-flash');
-      hideDeduction(); S.selLeft=null; S.animating=false; renderClues();
-    }, wrongReadTime);
-  }
-}
-
-function onSceneComplete() {
-  if(S.scene<4){
-    setTimeout(()=>{
-      const fade=$('scene-fade');
-      fade.classList.add('active');
-      setTimeout(()=>{
-        $('chapter-title-text').textContent=SCENES[S.scene+1].title;
-        fade.classList.add('show-title');
-      },700);
-      setTimeout(()=>fade.classList.remove('show-title'),2200);
-      setTimeout(()=>{
-        S.scene++; S.selLeft=null;
-        renderScene(); fade.classList.remove('active'); animateStory();
-      },2800);
-    },700);
-  } else {
-    setTimeout(()=>{
-      showScreen('reveal');
-      setTimeout(typeReveal,1000);
-    },800);
-  }
-}
-
-function typeReveal() {
-  const el=$('reveal-text'); el.innerHTML='';
-  const chars=REVEAL_TEXT.split('');
-  let i=0,inTag=false,buf='';
-  function tick(){
-    if(i>=chars.length){el.innerHTML=buf;setTimeout(()=>$('btn-replay').classList.add('show'),800);return;}
-    const c=chars[i];
-    if(c==='<') inTag=true;
-    if(inTag){buf+=c;if(c==='>'){inTag=false;el.innerHTML=buf;}i++;tick();return;}
-    buf+=c; el.innerHTML=buf; i++; setTimeout(tick,18);
-  }
-  tick();
-}
-
-function resetGame(){$('btn-replay').classList.remove('show');$('reveal-text').innerHTML='';showScreen('title');}
-
-$('clues-panel').addEventListener('click',e=>{
-  const c=e.target.closest('.clue');
-  if(!c) return;
-  handleTap(c.dataset.side,parseInt(c.dataset.index));
-});
-</script>
-
-</body>
-</html>
