@@ -46,8 +46,8 @@ input::placeholder { color: rgba(255,255,255,.3) }
         </div>
       </div>
     </div>
-    <div id="peekBelow" style="position:absolute;left:0;right:0;pointer-events:none;overflow:hidden;height:80px;opacity:0;transition:opacity .3s"></div>
-    <div id="peekAbove" style="position:absolute;left:0;right:0;pointer-events:none;overflow:hidden;height:80px;opacity:0;transition:opacity .3s"></div>
+    <div id="peekBelow" style="position:absolute;left:0;right:0;pointer-events:none;overflow:hidden;height:100px;opacity:0;transition:opacity .3s"></div>
+    <div id="peekAbove" style="position:absolute;left:0;right:0;pointer-events:none;overflow:hidden;height:100px;opacity:0;transition:opacity .3s"></div>
   </div>
 </div>
 
@@ -674,9 +674,9 @@ var UI=(function(){
    PEEK — Blurred mini-card preview of the other view layer
    ═══════════════════════════════════════════ */
 var Peek=(function(){
-  var SCALE=0.55;
-  var BLUR=4;
-  var OPACITY=0.5;
+  var SCALE=0.6;
+  var BLUR=3;
+  var OPACITY=0.75;
 
   function miniCards(list){
     var d=document.createElement("div");
@@ -693,7 +693,7 @@ var Peek=(function(){
 
   function applyMask(el,direction){
     el.style.filter="blur("+BLUR+"px)";
-    var grad="linear-gradient(to "+direction+", rgba(0,0,0,1) 20%, transparent)";
+    var grad="linear-gradient(to "+direction+", rgba(0,0,0,1) 40%, transparent 95%)";
     el.style.maskImage=grad;
     el.style.webkitMaskImage=grad;
   }
@@ -720,8 +720,8 @@ var Peek=(function(){
   }
 
   function position(fixedTop){
-    DOM.peekBelow.style.top=(fixedTop+Config.CONTENT_HEIGHT+40)+"px";
-    DOM.peekAbove.style.top=(fixedTop-75)+"px";
+    DOM.peekBelow.style.top=(fixedTop+Config.CONTENT_HEIGHT+24)+"px";
+    DOM.peekAbove.style.top=(fixedTop-70)+"px";
   }
 
   function hide(){
