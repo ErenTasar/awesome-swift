@@ -5,11 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Kategoriler</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;scrollbar-width:none}
-*::-webkit-scrollbar{display:none}
-html,body{overflow:hidden;position:fixed;width:100%;height:100%;background:#000;font-family:-apple-system,'SF Pro Rounded','SF Pro Display',BlinkMacSystemFont,sans-serif;overscroll-behavior:none}
-input::placeholder{color:rgba(255,255,255,.3)}
-#root{position:fixed;inset:0}
+* {
+  margin: 0; padding: 0; box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar { display: none }
+html, body {
+  overflow: hidden; position: fixed;
+  width: 100%; height: 100%;
+  background: #000;
+  font-family: -apple-system, 'SF Pro Rounded', 'SF Pro Display', BlinkMacSystemFont, sans-serif;
+  overscroll-behavior: none;
+}
+input::placeholder { color: rgba(255,255,255,.3) }
+#root { position: fixed; inset: 0 }
 </style>
 </head>
 <body>
@@ -43,7 +53,7 @@ input::placeholder{color:rgba(255,255,255,.3)}
 (function(){
 
 /* ═══════════════════════════════════════════
-   CONFIG — sabitler, renkler, boyutlar
+   CONFIG — Application constants, colors, card dimensions
    ═══════════════════════════════════════════ */
 var Config={
   COLORS:[
@@ -69,6 +79,10 @@ var Config={
     [55,0,198,95,1.6],[3,60,145,138,2.2],[75,2,197,78,1.4]
   ],
   CONTENT_HEIGHT:190,
+  BLUR_SUBMIT_DELAY:250,
+  EDIT_BLUR_DELAY:150,
+  FADE_DURATION:300,
+  BLANK_FADE_DELAY:320,
 
   pickColor:function(usedBgs){
     var available=this.COLORS.filter(function(c){return usedBgs.indexOf(c.bg)===-1;});
@@ -79,7 +93,7 @@ var Config={
 
 
 /* ═══════════════════════════════════════════
-   STATE — uygulama durumu
+   STATE — Application state: view mode, categories, todos
    ═══════════════════════════════════════════ */
 var State={
   view:"categories",
@@ -104,10 +118,12 @@ var State={
   adding:false,
   addingLock:false,
 
+  /** Returns the currently visible list (categories array or current category's todos) */
   activeList:function(){
     return this.view==="categories"?this.categories
       :(this.currentCategory?this.currentCategory.todos:[]);
   },
+  /** Generates and returns the next unique ID for the active list */
   activeNextId:function(){
     if(this.view==="categories")return this.nextCategoryId++;
     return this.currentCategory.nextTodoId++;
@@ -116,7 +132,7 @@ var State={
 
 
 /* ═══════════════════════════════════════════
-   DOM — element referansları
+   DOM — Cached element references
    ═══════════════════════════════════════════ */
 var DOM={
   appContainer:  document.getElementById("appContainer"),
@@ -134,7 +150,7 @@ var DOM={
 
 
 /* ═══════════════════════════════════════════
-   LAYOUT — viewport stabilizasyonu, klavye
+   LAYOUT — Viewport stabilization, keyboard handling
    ═══════════════════════════════════════════ */
 var Layout=(function(){
   var initialHeight=window.innerHeight;
@@ -197,7 +213,7 @@ var Layout=(function(){
 
 
 /* ═══════════════════════════════════════════
-   CARD FACTORY — kart DOM elemanları üretimi
+   CARD FACTORY — Card DOM element creation and promotion
    ═══════════════════════════════════════════ */
 var CardFactory=(function(){
 
@@ -218,28 +234,26 @@ var CardFactory=(function(){
     return svg;
   }
 
-  function checkButton(onClick){
+  var ACTION_BTN_STYLE={
+    width:"26px",height:"26px",borderRadius:"50%",border:"2px solid rgba(255,255,255,.28)",
+    background:"rgba(255,255,255,.08)",display:"flex",alignItems:"center",justifyContent:"center",
+    cursor:"pointer",padding:"0",transition:"background .15s,border-color .15s",
+  };
+
+  function actionButton(svgHTML,onClick){
     var btn=document.createElement("button");
-    Object.assign(btn.style,{
-      width:"26px",height:"26px",borderRadius:"50%",border:"2px solid rgba(255,255,255,.28)",
-      background:"rgba(255,255,255,.08)",display:"flex",alignItems:"center",justifyContent:"center",
-      cursor:"pointer",padding:"0",transition:"background .15s,border-color .15s",
-    });
-    btn.innerHTML='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    Object.assign(btn.style,ACTION_BTN_STYLE);
+    btn.innerHTML=svgHTML;
     btn.addEventListener("click",function(e){e.stopPropagation();onClick();});
     return btn;
   }
 
+  function checkButton(onClick){
+    return actionButton('<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',onClick);
+  }
+
   function editButton(onClick){
-    var btn=document.createElement("button");
-    Object.assign(btn.style,{
-      width:"26px",height:"26px",borderRadius:"50%",border:"2px solid rgba(255,255,255,.28)",
-      background:"rgba(255,255,255,.08)",display:"flex",alignItems:"center",justifyContent:"center",
-      cursor:"pointer",padding:"0",transition:"background .15s,border-color .15s",
-    });
-    btn.innerHTML='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>';
-    btn.addEventListener("click",function(e){e.stopPropagation();onClick();});
-    return btn;
+    return actionButton('<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>',onClick);
   }
 
   function textLabel(text,onEdit){
@@ -359,7 +373,7 @@ var CardFactory=(function(){
       if(e.key==="Enter"){e.preventDefault();submit();}
       if(e.key==="Escape"){submitted=true;TodoManager.cancel();}
     });
-    input.addEventListener("blur",function(){setTimeout(submit,250);});
+    input.addEventListener("blur",function(){setTimeout(submit,Config.BLUR_SUBMIT_DELAY);});
 
     content.appendChild(input);
     card.appendChild(content);
@@ -373,7 +387,7 @@ var CardFactory=(function(){
     });
 
     // Fade-in: pull'dan geliyorsa erken, + butonundan geliyorsa geç
-    var fadeDelay=pullWidth?100:320;
+    var fadeDelay=pullWidth?100:Config.BLANK_FADE_DELAY;
     setTimeout(function(){
       card.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
       card.style.opacity="1";
@@ -436,7 +450,7 @@ var CardFactory=(function(){
 
 
 /* ═══════════════════════════════════════════
-   ANIMATIONS — kart animasyonları
+   ANIMATIONS — Card remove/collapse animations
    ═══════════════════════════════════════════ */
 var Animations=(function(){
 
@@ -449,7 +463,7 @@ var Animations=(function(){
         el.style.transform="scale(.85) translateY(-6px)";
       });
     });
-    if(onDone)setTimeout(onDone,300);
+    if(onDone)setTimeout(onDone,Config.FADE_DURATION);
   }
 
   // Ortak width collapse: width→0, transitionend'de onDone çağır
@@ -498,7 +512,7 @@ var Animations=(function(){
 
 
 /* ═══════════════════════════════════════════
-   EDITING — satır içi metin düzenleme
+   EDITING — Inline text editing for cards
    ═══════════════════════════════════════════ */
 var Editing={
   start:function(content,textDiv,todo,categoryMode){
@@ -538,7 +552,7 @@ var Editing={
       if(e.key==="Enter"){e.preventDefault();commit();}
       if(e.key==="Escape"){committed=true;content.replaceChild(textDiv,input);}
     });
-    input.addEventListener("blur",function(){setTimeout(commit,150);});
+    input.addEventListener("blur",function(){setTimeout(commit,Config.EDIT_BLUR_DELAY);});
 
     content.replaceChild(input,textDiv);
     input.focus({preventScroll:true});
@@ -549,7 +563,7 @@ var Editing={
 
 
 /* ═══════════════════════════════════════════
-   UI — boş durum, subtitle, render
+   UI — Empty state, subtitle updates, full render
    ═══════════════════════════════════════════ */
 var UI=(function(){
 
@@ -620,9 +634,11 @@ var UI=(function(){
 
 
 /* ═══════════════════════════════════════════
-   TODO MANAGER — ekleme, onaylama, iptal
+   TODO MANAGER — Add, confirm, cancel, consecutive adding
    ═══════════════════════════════════════════ */
 var TodoManager={
+  /** Start adding a new item. Creates a blank card with input.
+   *  @param {number} [pullWidth] - Initial width from pull gesture (px) */
   add:function(pullWidth){
     if(State.addingLock)return;
     DOM.proxyInput.focus({preventScroll:true});
@@ -639,6 +655,9 @@ var TodoManager={
     UI.updateSubtitle();
   },
 
+  /** Confirm blank card as permanent item. Promotes in-place (no DOM rebuild).
+   *  @param {string} text - Item text
+   *  @param {{bg:string,accent:string}} color - Color pair */
   confirm:function(text,color){
     var item={id:State.activeNextId(),text:text,color:color};
     if(State.view==="categories"){item.todos=[];item.nextTodoId=1;}
@@ -665,8 +684,9 @@ var TodoManager={
     UI.updateSubtitle();
   },
 
-  // Ardışık ekleme: mevcut task'ı onayla ve hemen yeni blank card aç
-  // Ardışık ekleme: mevcut task'ı onayla ve hemen yeni blank card aç
+  /** Confirm current item AND open new blank card (consecutive adding via pull).
+   *  @param {number} [pullWidth] - Pull width for the new card
+   *  @returns {boolean} true if confirmed, false if empty text (will be cancelled) */
   confirmAndContinue:function(pullWidth){
     var nc=DOM.queryNewCard();
     if(!nc||!nc._blankInput)return false;
@@ -682,6 +702,7 @@ var TodoManager={
     return true;
   },
 
+  /** Cancel adding: collapse blank card, reset state */
   cancel:function(){
     State.adding=false;State.addingLock=false;
     var nc=DOM.queryNewCard();
@@ -693,7 +714,7 @@ var TodoManager={
 
 
 /* ═══════════════════════════════════════════
-   NAVIGATION — görünüm geçişleri
+   NAVIGATION — Category↔Task view transitions (crossfade, swipe)
    ═══════════════════════════════════════════ */
 var Navigation=(function(){
   var currentAnim=null;
@@ -873,15 +894,30 @@ var Navigation=(function(){
 
 
 /* ═══════════════════════════════════════════
-   GESTURES — pull-to-add (touch + mouse)
+   GESTURES — Unified touch+mouse: pull-to-add, scroll, vertical swipe
    ═══════════════════════════════════════════ */
 var Gestures=(function(){
+  /*
+   * Gesture state (g) fields:
+   *   active           - gesture tracking is in progress
+   *   pulling          - pull-to-add mode engaged
+   *   startX/startY    - initial touch/mouse position
+   *   lastX            - previous frame X (for delta calc)
+   *   axis             - detected axis: "x" | "y" | null
+   *   dy               - cumulative vertical delta (for swipe)
+   *   swiping          - vertical view-switch swipe in progress
+   *   direction        - swipe direction: "up" | "down"
+   *   pullVal          - current damped pull distance
+   *   scrollStart      - scrollLeft at gesture start
+   *   fromNewCardInput - gesture started on blank card's input
+   *   overscroll       - edge overscroll amount (bounce effect)
+   *   mouse            - true if mouse (not touch) gesture
+   */
   var g={active:false};
   var momentumRAF=null;
-  var momentumOffset=0;
   var bounceAnim=null;
 
-  // ── Pull-to-add helpers (değişmedi) ──
+  // ── Pull-to-add helpers ──
   function dampedPull(rawDx){
     var l=rawDx*0.55;
     return l<=Config.PULL_MAX?l:Config.PULL_MAX+(l-Config.PULL_MAX)*0.15;
@@ -1025,76 +1061,82 @@ var Gestures=(function(){
     };
   }
 
-  // ── INIT: birleşik handler ──
+  // ── INIT: unified touch+mouse handler setup ──
   function init(){
-    var ac=DOM.appContainer;
-    var sc=DOM.scrollContainer;
-    var vel=createVelocityTracker();
+    var appContainer=DOM.appContainer;
+    var scrollEl=DOM.scrollContainer;
+    var velocity=createVelocityTracker();
 
-    // ── TOUCH: hepsi appContainer üzerinde ──
-    ac.addEventListener("touchstart",function(e){
+    // ── Helper: capture horizontal swipe from blank card input ──
+    function handleNewCardInputSwipe(dx,dy){
+      if(!g.axis){
+        g.axis=detectAxis(dx,dy);
+        if(!g.axis)return "pending";
+        if(g.axis==="x"){
+          var nc=DOM.queryNewCard();
+          if(nc&&nc._markSubmitted)nc._markSubmitted();
+          if(nc&&nc._blankInput)nc._blankInput.blur();
+          g.fromNewCardInput=false;
+          return "captured";
+        }
+        g.active=false;
+        return "released";
+      }
+      return g.axis?"captured":"pending";
+    }
+
+    // ── TOUCH ──
+    appContainer.addEventListener("touchstart",function(e){
       var fromNewCardInput=State.adding&&e.target.closest(".new-card")&&isInteractive(e.target);
       if(!fromNewCardInput&&isInteractive(e.target))return;
       cancelMomentum();cancelBounce();
       var t=e.touches[0];
       g={active:true,pulling:false,startX:t.clientX,startY:t.clientY,lastX:t.clientX,
-         axis:null,dy:0,swiping:false,direction:null,pullVal:0,scrollStart:sc.scrollLeft,
+         axis:null,dy:0,swiping:false,direction:null,pullVal:0,scrollStart:scrollEl.scrollLeft,
          fromNewCardInput:!!fromNewCardInput};
-      vel.reset();
-      vel.add(t.clientX);
+      velocity.reset();
+      velocity.add(t.clientX);
     },{passive:true});
 
-    ac.addEventListener("touchmove",function(e){
+    appContainer.addEventListener("touchmove",function(e){
       if(!g.active)return;
       var t=e.touches[0];
       var dx=t.clientX-g.startX;
       var dy=t.clientY-g.startY;
 
-      // new-card input'undan başlayan gesture: sadece yatay swipe ise devral
+      // Blank card input → only capture horizontal swipes
       if(g.fromNewCardInput){
-        if(!g.axis){
-          g.axis=detectAxis(dx,dy);
-          if(!g.axis)return; // henüz belirsiz — input'a müdahale etme
-          if(g.axis==="y"){
-            g.active=false; // dikey → gesture iptal, input çalışsın
-            return;
-          }
-          // axis=x → yatay swipe! Input'tan devral
-          var nc=DOM.queryNewCard();
-          if(nc&&nc._markSubmitted)nc._markSubmitted();
-          if(nc&&nc._blankInput)nc._blankInput.blur();
-          g.fromNewCardInput=false;
-        }
-        if(!g.axis)return;
+        var result=handleNewCardInputSwipe(dx,dy);
+        if(result!=="captured")return;
       }
 
       if(!g.axis){
         g.axis=detectAxis(dx,dy);
         if(!g.axis){
           e.preventDefault();
-          vel.add(t.clientX);
-          sc.scrollLeft-=(t.clientX-g.lastX);
+          velocity.add(t.clientX);
+          scrollEl.scrollLeft-=(t.clientX-g.lastX);
           g.lastX=t.clientX;
           return;
         }
-        if(g.axis==="y")sc.scrollLeft=g.scrollStart;
+        if(g.axis==="y")scrollEl.scrollLeft=g.scrollStart;
       }
 
-      // ── YATAY: scroll veya pull-to-add ──
+      // ── HORIZONTAL: scroll or pull-to-add ──
       if(g.axis==="x"){
         e.preventDefault();
-        vel.add(t.clientX);
+        velocity.add(t.clientX);
         var frameDx=t.clientX-g.lastX;
         g.lastX=t.clientX;
 
-        if(!g.pulling&&g.scrollStart<2&&sc.scrollLeft<2&&dx>4)g.pulling=true;
+        if(!g.pulling&&g.scrollStart<2&&scrollEl.scrollLeft<2&&dx>4)g.pulling=true;
 
         if(g.pulling){
           applyPull(dx);
         }else{
-          var before=sc.scrollLeft;
-          sc.scrollLeft-=frameDx;
-          var clamped=sc.scrollLeft===before&&frameDx!==0;
+          var before=scrollEl.scrollLeft;
+          scrollEl.scrollLeft-=frameDx;
+          var clamped=scrollEl.scrollLeft===before&&frameDx!==0;
           if(clamped){
             g.overscroll=(g.overscroll||0)+frameDx*0.5;
             g.overscroll=Math.sign(g.overscroll)*Math.min(Math.abs(g.overscroll),80);
@@ -1107,7 +1149,7 @@ var Gestures=(function(){
         return;
       }
 
-      // ── DİKEY: kategori↔task geçişi ──
+      // ── VERTICAL: category↔task view switch ──
       e.preventDefault();
       g.dy=dy;
 
@@ -1126,10 +1168,10 @@ var Gestures=(function(){
       }
     },{passive:false});
 
-    ac.addEventListener("touchend",function(){
+    appContainer.addEventListener("touchend",function(){
       if(!g.active)return;
 
-      // Yatay finalize (axis=x veya tentative scroll yapıldıysa)
+      // Horizontal finalize
       if(g.axis==="x"||!g.axis){
         if(g.axis==="x"&&g.pulling&&(g.pullVal||0)>Config.PULL_THRESHOLD){
           commitPull(g.pullVal||0);
@@ -1139,13 +1181,13 @@ var Gestures=(function(){
           if(g.overscroll&&Math.abs(g.overscroll)>2){
             bounce(g.overscroll);
           }else{
-            var v=vel.get();
+            var v=velocity.get();
             if(Math.abs(v)>Config.MOMENTUM_MIN)startMomentum(v);
           }
         }
       }
 
-      // Dikey finalize
+      // Vertical finalize
       if(g.swiping){
         var progress=Math.min(Math.abs(g.dy)/200,1);
         Navigation.endSwipe(progress>0.2,g.direction);
@@ -1154,22 +1196,22 @@ var Gestures=(function(){
       g={active:false};
     },{passive:true});
 
-    ac.addEventListener("touchcancel",function(){
+    appContainer.addEventListener("touchcancel",function(){
       if(g.pulling)resetVisuals();
       if(g.swiping)Navigation.endSwipe(false,g.direction);
       g={active:false};
     },{passive:true});
 
-    // ── MOUSE: appContainer üzerinde ──
-    ac.addEventListener("mousedown",function(e){
+    // ── MOUSE ──
+    appContainer.addEventListener("mousedown",function(e){
       var fromNewCardInput=State.adding&&e.target.closest(".new-card")&&isInteractive(e.target);
       if(!fromNewCardInput&&isInteractive(e.target))return;
       cancelMomentum();cancelBounce();
       g={active:true,pulling:false,startX:e.clientX,startY:e.clientY,lastX:e.clientX,
-         axis:null,mouse:true,pullVal:0,scrollStart:sc.scrollLeft,
+         axis:null,mouse:true,pullVal:0,scrollStart:scrollEl.scrollLeft,
          fromNewCardInput:!!fromNewCardInput};
-      vel.reset();
-      vel.add(e.clientX);
+      velocity.reset();
+      velocity.add(e.clientX);
       if(!fromNewCardInput)e.preventDefault();
     });
 
@@ -1178,22 +1220,11 @@ var Gestures=(function(){
       var dx=e.clientX-g.startX;
       var dy=e.clientY-g.startY;
 
-      // new-card input'undan başlayan gesture: sadece yatay swipe ise devral
+      // Blank card input → only capture horizontal swipes
       if(g.fromNewCardInput){
-        if(!g.axis){
-          g.axis=detectAxis(dx,dy);
-          if(!g.axis)return;
-          if(g.axis!=="x"){
-            g.active=false;
-            return;
-          }
-          var nc=DOM.queryNewCard();
-          if(nc&&nc._markSubmitted)nc._markSubmitted();
-          if(nc&&nc._blankInput)nc._blankInput.blur();
-          g.fromNewCardInput=false;
-          e.preventDefault();
-        }
-        if(!g.axis)return;
+        var result=handleNewCardInputSwipe(dx,dy);
+        if(result==="captured")e.preventDefault();
+        if(result!=="captured")return;
       }
 
       if(!g.axis){
@@ -1202,17 +1233,17 @@ var Gestures=(function(){
       }
       if(g.axis!=="x")return;
 
-      vel.add(e.clientX);
+      velocity.add(e.clientX);
       var frameDx=e.clientX-g.lastX;
       g.lastX=e.clientX;
 
-      if(!g.pulling&&g.scrollStart<2&&sc.scrollLeft<2&&dx>4)g.pulling=true;
+      if(!g.pulling&&g.scrollStart<2&&scrollEl.scrollLeft<2&&dx>4)g.pulling=true;
 
       if(g.pulling){applyPull(dx);}
       else{
-        var before=sc.scrollLeft;
-        sc.scrollLeft-=frameDx;
-        var clamped=sc.scrollLeft===before&&frameDx!==0;
+        var before=scrollEl.scrollLeft;
+        scrollEl.scrollLeft-=frameDx;
+        var clamped=scrollEl.scrollLeft===before&&frameDx!==0;
         if(clamped){
           g.overscroll=(g.overscroll||0)+frameDx*0.5;
           g.overscroll=Math.sign(g.overscroll)*Math.min(Math.abs(g.overscroll),80);
@@ -1233,7 +1264,7 @@ var Gestures=(function(){
       }else if(g.overscroll&&Math.abs(g.overscroll)>2){
         bounce(g.overscroll);
       }else{
-        var v=vel.get();
+        var v=velocity.get();
         if(Math.abs(v)>Config.MOMENTUM_MIN)startMomentum(v);
       }
       g={active:false};
@@ -1248,7 +1279,7 @@ var Gestures=(function(){
 
 
 /* ═══════════════════════════════════════════
-   INIT — başlat
+   INIT — Bootstrap
    ═══════════════════════════════════════════ */
 Layout.init();
 Gestures.init();
