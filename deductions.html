@@ -220,10 +220,10 @@ var CardFactory=(function(){
     Object.assign(div.style,{
       fontWeight:"600",fontSize:"15.5px",color:"#fff",lineHeight:"1.22",letterSpacing:"-.01em",
       display:"-webkit-box",WebkitLineClamp:"2",WebkitBoxOrient:"vertical",
-      overflow:"hidden",textOverflow:"ellipsis",wordBreak:"break-all",cursor:"text",
+      overflow:"hidden",textOverflow:"ellipsis",wordBreak:"break-all",cursor:onEdit?"text":"default",
     });
     div.textContent=text;
-    div.addEventListener("click",function(e){e.stopPropagation();onEdit(div);});
+    if(onEdit){div.addEventListener("click",function(e){e.stopPropagation();onEdit(div);});}
     return div;
   }
 
@@ -240,6 +240,7 @@ var CardFactory=(function(){
   // Mevcut kart (task veya kategori)
   function existing(item,opts){
     opts=opts||{};
+    var isCategory=!!opts.isCategory;
     var wrapper=document.createElement("div");
     wrapper.className="card-wrapper";
     Object.assign(wrapper.style,{width:Config.SLOT+"px",overflow:"hidden",flexShrink:"0"});
@@ -253,16 +254,24 @@ var CardFactory=(function(){
 
     var content=contentContainer("space-between");
 
+    // Kategori: text tıklanamaz (click card'a bubbles → onTap), check button editing başlatır
+    // Task: text tıklanınca editing, check button silme
+    var txtDiv;
+    if(isCategory){
+      txtDiv=textLabel(item.text); // onEdit yok → click handler yok → bubbles to card
+    }else{
+      txtDiv=textLabel(item.text,function(div){Editing.start(content,div,item);});
+    }
+
     var btnRow=document.createElement("div");
     Object.assign(btnRow.style,{display:"flex",justifyContent:"flex-end"});
-    btnRow.appendChild(checkButton(function(){
-      if(opts.onCheck)opts.onCheck();
-    }));
+    if(isCategory){
+      btnRow.appendChild(checkButton(function(){Editing.start(content,txtDiv,item,true);}));
+    }else{
+      btnRow.appendChild(checkButton(function(){if(opts.onCheck)opts.onCheck();}));
+    }
     content.appendChild(btnRow);
-
-    content.appendChild(textLabel(item.text,function(div){
-      Editing.start(content,div,item);
-    }));
+    content.appendChild(txtDiv);
 
     card.appendChild(content);
     wrapper.appendChild(card);
@@ -352,6 +361,7 @@ var CardFactory=(function(){
   // Yeni kartı mevcut karta dönüştür (yerinde — DOM'dan kaldırıp tekrar oluşturmaz)
   function promote(nc,item,opts){
     opts=opts||{};
+    var isCategory=!!opts.isCategory;
     nc.className="card-wrapper";
     var card=nc.firstElementChild;
     var content=card.querySelector(".card-content");
@@ -363,18 +373,24 @@ var CardFactory=(function(){
 
     content.style.justifyContent="space-between";
 
+    // Text label
+    var txtDiv;
+    if(isCategory){
+      txtDiv=textLabel(item.text);
+    }else{
+      txtDiv=textLabel(item.text,function(div){Editing.start(content,div,item);});
+    }
+
     // Check button
     var btnRow=document.createElement("div");
     Object.assign(btnRow.style,{display:"flex",justifyContent:"flex-end"});
-    btnRow.appendChild(checkButton(function(){
-      if(opts.onCheck)opts.onCheck();
-    }));
+    if(isCategory){
+      btnRow.appendChild(checkButton(function(){Editing.start(content,txtDiv,item,true);}));
+    }else{
+      btnRow.appendChild(checkButton(function(){if(opts.onCheck)opts.onCheck();}));
+    }
     content.insertBefore(btnRow,content.firstChild);
-
-    // Text label
-    content.appendChild(textLabel(item.text,function(div){
-      Editing.start(content,div,item);
-    }));
+    content.appendChild(txtDiv);
 
     // Kart gövdesi tıklama (kategori navigasyonu için)
     if(opts.onTap){
@@ -454,7 +470,7 @@ var Animations=(function(){
    EDITING — satır içi metin düzenleme
    ═══════════════════════════════════════════ */
 var Editing={
-  start:function(content,textDiv,todo){
+  start:function(content,textDiv,todo,categoryMode){
     var input=document.createElement("input");
     input.type="text";input.inputMode="text";input.enterKeyHint="done";
     input.autocomplete="off";input.value=todo.text;
@@ -468,10 +484,22 @@ var Editing={
     function commit(){
       if(committed)return;committed=true;
       var v=(input.value||"").trim();
-      if(v&&v!==todo.text)todo.text=v;
-      var label=CardFactory.textLabel(todo.text,function(div){
-        Editing.start(content,div,todo);
-      });
+      if(v&&v!==todo.text){
+        todo.text=v;
+        // Kategori adı değiştiyse ve aktifse header'ı güncelle
+        if(categoryMode&&State.currentCategory===todo){
+          DOM.viewTitle.textContent=todo.text;
+        }
+      }
+      var label;
+      if(categoryMode){
+        // Kategori: text tıklanamaz, click bubbles to card
+        label=CardFactory.textLabel(todo.text);
+      }else{
+        label=CardFactory.textLabel(todo.text,function(div){
+          Editing.start(content,div,todo);
+        });
+      }
       content.replaceChild(label,input);
     }
 
@@ -533,6 +561,7 @@ var UI=(function(){
 
     renderAll:function(){
       DOM.track.innerHTML="";
+      DOM.scrollContainer.scrollLeft=0;
       var list=State.activeList();
       if(list.length===0&&!State.adding){
         UI.showEmptyState();
@@ -541,7 +570,7 @@ var UI=(function(){
           var el;
           if(State.view==="categories"){
             el=CardFactory.existing(item,{
-              onCheck:function(){},
+              isCategory:true,
               onTap:function(){Navigation.goToTasks(item);}
             });
           }else{
@@ -572,6 +601,7 @@ var TodoManager={
     var color=Config.pickColor(list.map(function(t){return t.color.bg;}));
 
     UI.removeEmptyState();
+    DOM.scrollContainer.scrollLeft=0;
 
     var el=CardFactory.blank(color,pullWidth);
     DOM.track.insertBefore(el,DOM.track.firstChild);
@@ -589,7 +619,7 @@ var TodoManager={
       var opts;
       if(State.view==="categories"){
         opts={
-          onCheck:function(){},
+          isCategory:true,
           onTap:function(){Navigation.goToTasks(item);}
         };
       }else{
@@ -620,6 +650,7 @@ var TodoManager={
 var Navigation=(function(){
   var transitioning=false;
 
+  // Tap ile geçiş (kategori kartına tıklama)
   function transition(direction,callback){
     if(transitioning)return;
     transitioning=true;
@@ -650,6 +681,62 @@ var Navigation=(function(){
     DOM.viewTitle.textContent=State.view==="categories"?"Kategoriler":State.currentCategory.text;
   }
 
+  function swapView(direction){
+    if(direction==="down"){
+      State.view="categories";
+      State.currentCategory=null;
+    }else{
+      State.view="tasks";
+      State.currentCategory=State.lastCategory;
+    }
+    updateHeader();
+    UI.renderAll();
+  }
+
+  // Progressive swipe: parmak takibi
+  function updateSwipe(progress,direction){
+    if(transitioning)return;
+    var p=Math.min(progress,1);
+    var dy=direction==="down"?p*25:-p*25;
+    DOM.contentBlock.style.transition="none";
+    DOM.contentBlock.style.opacity=String(1-p*0.85);
+    DOM.contentBlock.style.transform="translateY("+dy+"px)";
+  }
+
+  function endSwipe(commit,direction){
+    if(transitioning)return;
+    if(commit){
+      transitioning=true;
+      var outY=direction==="down"?"30px":"-30px";
+      var inY=direction==="down"?"-30px":"30px";
+
+      // Hızlı fade-out tamamla (mevcut progress'ten devam)
+      DOM.contentBlock.style.transition="opacity .12s ease, transform .12s ease";
+      DOM.contentBlock.style.opacity="0";
+      DOM.contentBlock.style.transform="translateY("+outY+")";
+
+      setTimeout(function(){
+        swapView(direction);
+        // Yeni view fade-in
+        DOM.contentBlock.style.transition="none";
+        DOM.contentBlock.style.transform="translateY("+inY+")";
+        requestAnimationFrame(function(){
+          requestAnimationFrame(function(){
+            DOM.contentBlock.style.transition="opacity .22s ease, transform .22s cubic-bezier(.25,1,.5,1)";
+            DOM.contentBlock.style.opacity="1";
+            DOM.contentBlock.style.transform="translateY(0)";
+            setTimeout(function(){transitioning=false;},240);
+          });
+        });
+      },130);
+    }else{
+      // Geri dön (spring back)
+      DOM.contentBlock.style.transition="opacity .22s ease, transform .22s cubic-bezier(.25,1,.5,1)";
+      DOM.contentBlock.style.opacity="1";
+      DOM.contentBlock.style.transform="translateY(0)";
+    }
+  }
+
   return {
     goToTasks:function(cat){
       transition("up",function(){
@@ -667,7 +754,10 @@ var Navigation=(function(){
         updateHeader();
         UI.renderAll();
       });
-    }
+    },
+    updateSwipe:updateSwipe,
+    endSwipe:endSwipe,
+    isTransitioning:function(){return transitioning;}
   };
 })();
 
@@ -734,7 +824,7 @@ var Gestures=(function(){
   function init(){
     var sc=DOM.scrollContainer;
 
-    // Touch
+    // Touch — sadece yatay (scroll + pull-to-add)
     sc.addEventListener("touchstart",function(e){
       if(isInteractive(e.target))return;
       var t=e.touches[0];
@@ -749,19 +839,14 @@ var Gestures=(function(){
         if(Math.abs(dx)<4&&Math.abs(dy)<4)return;
         g.axis=Math.abs(dx)>=Math.abs(dy)?"x":"y";
       }
-      if(g.axis==="y"){g.verticalDy=dy;e.preventDefault();return;}
+      if(g.axis==="y")return; // dikey: appContainer halleder
       if(!g.pulling&&sc.scrollLeft<2&&dx>4)g.pulling=true;
       if(g.pulling){e.preventDefault();applyPull(dx);}
     },{passive:false});
 
     sc.addEventListener("touchend",function(){
       if(!g.active)return;
-      var vdy=g.verticalDy||0;
-      if(g.axis==="y"&&Math.abs(vdy)>50){
-        if(vdy>50&&State.view==="tasks")Navigation.goToCategories();
-        if(vdy<-50&&State.view==="categories"&&State.lastCategory)Navigation.goToTasks(State.lastCategory);
-      }
-      endGesture();
+      endGesture(); // sadece pull-to-add finalize
     },{passive:true});
 
     sc.addEventListener("touchcancel",function(){
@@ -792,24 +877,54 @@ var Gestures=(function(){
     // + button
     DOM.addBtn.addEventListener("click",function(){TodoManager.add();});
 
-    // Dikey swipe: appContainer seviyesinde (daha geniş yakalama alanı)
+    // Dikey swipe: appContainer seviyesinde — progressive transition
     var vg={active:false};
     DOM.appContainer.addEventListener("touchstart",function(e){
       var t=e.touches[0];
-      vg={active:true,startY:t.clientY,dy:0};
+      vg={active:true,startX:t.clientX,startY:t.clientY,dy:0,axis:null,swiping:false,direction:null};
     },{passive:true});
+
     DOM.appContainer.addEventListener("touchmove",function(e){
       if(!vg.active)return;
-      vg.dy=e.touches[0].clientY-vg.startY;
-      if(Math.abs(vg.dy)>10)e.preventDefault();
+      var t=e.touches[0];
+      var dx=t.clientX-vg.startX;
+      var dy=t.clientY-vg.startY;
+      vg.dy=dy;
+
+      // Axis detection: yatay ise dokunma → native scroll çalışsın
+      if(!vg.axis){
+        if(Math.abs(dx)<8&&Math.abs(dy)<8)return;
+        vg.axis=Math.abs(dy)>Math.abs(dx)?"y":"x";
+      }
+      if(vg.axis!=="y")return; // yatay → müdahale etme
+
+      e.preventDefault();
+
+      // Ekleme modundayken veya transition sırasında swipe başlatma
+      if(State.adding||Navigation.isTransitioning())return;
+
+      // Swipe yönünü belirle ve başlat
+      if(!vg.swiping&&Math.abs(dy)>15){
+        var dir=dy>0?"down":"up";
+        var canSwipe=(dir==="down"&&State.view==="tasks")||
+                     (dir==="up"&&State.view==="categories"&&State.lastCategory);
+        if(canSwipe){vg.swiping=true;vg.direction=dir;}
+      }
+
+      // Progressive transition güncelle
+      if(vg.swiping){
+        var progress=Math.min(Math.abs(dy)/200,1);
+        Navigation.updateSwipe(progress,vg.direction);
+      }
     },{passive:false});
+
     DOM.appContainer.addEventListener("touchend",function(){
       if(!vg.active)return;
-      var dy=vg.dy;
+      if(vg.swiping){
+        var progress=Math.min(Math.abs(vg.dy)/200,1);
+        Navigation.endSwipe(progress>0.2,vg.direction);
+      }
       vg={active:false};
-      if(Math.abs(dy)<50)return;
-      if(dy>50&&State.view==="tasks")Navigation.goToCategories();
-      if(dy<-50&&State.view==="categories"&&State.lastCategory)Navigation.goToTasks(State.lastCategory);
     },{passive:true});
   }
 
