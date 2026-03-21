@@ -109,7 +109,7 @@ background:“rgba(0,0,0,.15)”,border:“none”,borderRadius:6,outline:“non
 padding:“2px 4px”,margin:”-2px -4px”,width:“calc(100% + 8px)”,caretColor:”#fff”,fontFamily:“inherit”}}
 />
 ):(
-<div onClick={e=>{e.stopPropagation();setEditing(true)}} style={{…textClamp,cursor:“text”}}>
+<div onClick={e=>{e.stopPropagation();setEditing(true)}} style={{...textClamp,cursor:“text”}}>
 {todo.text}
 </div>
 )}
@@ -142,7 +142,7 @@ return(
 <div style={{position:“relative”,zIndex:1,padding:“12px 14px”,height:“100%”,display:“flex”,flexDirection:“column”,justifyContent:“flex-end”}}>
 <input ref={inputRef} type=“text” inputMode=“text” enterKeyHint=“done”
 autoFocus autoComplete=“off” autoCorrect=“off” spellCheck=“false”
-placeholder=“Görev adı…”
+placeholder=“Görev adı...”
 onKeyDown={e=>{if(e.key===“Enter”){e.preventDefault();submit()}if(e.key===“Escape”)onCancel()}}
 onBlur={()=>setTimeout(submit,250)}
 style={{fontWeight:600,fontSize:16,color:”#fff”,lineHeight:1.22,letterSpacing:”-.01em”,
@@ -260,7 +260,7 @@ return()=>{window.removeEventListener(“mousemove”,mv);window.removeEventList
 
 const add=useCallback((text)=>{
 const c=newCol||rndColor(todos.map(t=>t.color.bg));
-setTodos(p=>[{id:nid,text,color:c},…p]);
+setTodos(p=>[{id:nid,text,color:c},...p]);
 setNid(n=>n+1);setAdding(false);setNewCol(null);addingRef.current=false;
 },[newCol,todos,nid]);
 
@@ -271,13 +271,12 @@ if(actualRemove){setTodos(p=>p.filter(t=>t.id!==id));setRemovingSet(s=>{const n=
 else{setRemovingSet(s=>new Set(s).add(id))}
 },[]);
 
-const handleRename=useCallback((id,t)=>{setTodos(p=>p.map(x=>x.id===id?{…x,text:t}:x))},[]);
+const handleRename=useCallback((id,t)=>{setTodos(p=>p.map(x=>x.id===id?{...x,text:t}:x))},[]);
 
 return(
 <div style={{position:“fixed”,inset:0,background:”#000”,overflow:“hidden”,
 fontFamily:”-apple-system,‘SF Pro Rounded’,‘SF Pro Display’,BlinkMacSystemFont,sans-serif”}}>
 
-```
   <div style={{position:"absolute",left:0,right:0,top:100}}>
     <div style={{padding:"0 20px",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
       <div>
@@ -330,7 +329,6 @@ fontFamily:”-apple-system,‘SF Pro Rounded’,‘SF Pro Display’,BlinkMacSy
     </div>
   </div>
 </div>
-```
 
 );
 }
