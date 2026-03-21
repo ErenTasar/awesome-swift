@@ -964,7 +964,7 @@ var Gestures=(function(){
       cancelMomentum();
       var t=e.touches[0];
       g={active:true,pulling:false,startX:t.clientX,startY:t.clientY,lastX:t.clientX,
-         axis:null,dy:0,swiping:false,direction:null,pullVal:0};
+         axis:null,dy:0,swiping:false,direction:null,pullVal:0,scrollStart:sc.scrollLeft};
       vel.reset();
       vel.add(t.clientX);
     },{passive:true});
@@ -988,7 +988,7 @@ var Gestures=(function(){
         var frameDx=t.clientX-g.lastX;
         g.lastX=t.clientX;
 
-        if(!g.pulling&&sc.scrollLeft<2&&dx>4)g.pulling=true;
+        if(!g.pulling&&g.scrollStart<2&&sc.scrollLeft<2&&dx>4)g.pulling=true;
 
         if(g.pulling){
           applyPull(dx);
@@ -1052,7 +1052,7 @@ var Gestures=(function(){
       if(isInteractive(e.target))return;
       cancelMomentum();
       g={active:true,pulling:false,startX:e.clientX,startY:e.clientY,lastX:e.clientX,
-         axis:null,mouse:true,pullVal:0};
+         axis:null,mouse:true,pullVal:0,scrollStart:sc.scrollLeft};
       e.preventDefault();
     });
 
@@ -1071,7 +1071,7 @@ var Gestures=(function(){
       var frameDx=e.clientX-g.lastX;
       g.lastX=e.clientX;
 
-      if(!g.pulling&&sc.scrollLeft<2&&dx>4)g.pulling=true;
+      if(!g.pulling&&g.scrollStart<2&&sc.scrollLeft<2&&dx>4)g.pulling=true;
 
       if(g.pulling){applyPull(dx);}
       else{sc.scrollLeft-=frameDx;}
