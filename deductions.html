@@ -991,14 +991,15 @@ var Gestures=(function(){
       },
       get:function(){
         if(count<2)return 0;
-        var now=performance.now(),oldest=-1,oi=0;
-        for(var i=0;i<count;i++){
+        var newest=(head-1+8)&7;
+        if(performance.now()-ts[newest]>200)return 0;
+        var oldest=-1,oi=0;
+        for(var i=1;i<count;i++){
           var idx=(head-1-i+8)&7;
-          if(now-ts[idx]>80)break;
+          if(ts[newest]-ts[idx]>100)break;
           oldest=idx;oi=i;
         }
         if(oi<1)return 0;
-        var newest=(head-1+8)&7;
         var dt=ts[newest]-ts[oldest];
         if(dt<1)return 0;
         return(xs[newest]-xs[oldest])/dt*16.67;
@@ -1121,6 +1122,8 @@ var Gestures=(function(){
       cancelMomentum();cancelBounce();
       g={active:true,pulling:false,startX:e.clientX,startY:e.clientY,lastX:e.clientX,
          axis:null,mouse:true,pullVal:0,scrollStart:sc.scrollLeft};
+      vel.reset();
+      vel.add(e.clientX);
       e.preventDefault();
     });
 
@@ -1135,6 +1138,7 @@ var Gestures=(function(){
       }
       if(g.axis!=="x")return;
 
+      vel.add(e.clientX);
       var frameDx=e.clientX-g.lastX;
       g.lastX=e.clientX;
 
@@ -1164,6 +1168,9 @@ var Gestures=(function(){
         resetVisuals();
       }else if(g.overscroll&&Math.abs(g.overscroll)>2){
         bounce(g.overscroll);
+      }else{
+        var v=vel.get();
+        if(Math.abs(v)>Config.MOMENTUM_MIN)startMomentum(v);
       }
       g={active:false};
     });
