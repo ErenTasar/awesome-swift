@@ -62,7 +62,7 @@ var Config={
   PULL_MAX:90,
   AXIS_THRESHOLD:8,
   AXIS_RATIO:1.5,
-  MOMENTUM_FRICTION:0.95,
+  MOMENTUM_FRICTION:0.985,
   MOMENTUM_MIN:0.5,
   SCRATCHES:[
     [15,8,185,132,2.8],[35,3,195,118,2],[8,35,165,137,2.4],
@@ -857,6 +857,7 @@ var Navigation=(function(){
 var Gestures=(function(){
   var g={active:false};
   var momentumRAF=null;
+  var momentumOffset=0;
   var bounceAnim=null;
 
   // ── Pull-to-add helpers (değişmedi) ──
@@ -929,51 +930,74 @@ var Gestures=(function(){
   }
 
   function cancelMomentum(){
-    if(momentumRAF){cancelAnimationFrame(momentumRAF);momentumRAF=null;}
+    if(momentumRAF){
+      cancelAnimationFrame(momentumRAF);momentumRAF=null;
+      DOM.scrollContainer.scrollLeft-=momentumOffset;
+      DOM.track.style.transform="";
+      momentumOffset=0;
+    }
   }
 
   function startMomentum(vel){
     cancelMomentum();
     var sc=DOM.scrollContainer;
+    var maxSc=sc.scrollWidth-sc.clientWidth;
     var lastT=performance.now();
+    momentumOffset=0;
     function step(now){
       var dt=now-lastT;lastT=now;
       vel*=Math.pow(Config.MOMENTUM_FRICTION,dt/16.67);
-      if(Math.abs(vel)<Config.MOMENTUM_MIN){momentumRAF=null;return;}
-      sc.scrollLeft-=vel;
-      var atLeft=sc.scrollLeft<=0;
-      var atRight=sc.scrollLeft>=sc.scrollWidth-sc.clientWidth;
-      if(atLeft||atRight){
-        momentumRAF=null;
+      if(Math.abs(vel)<Config.MOMENTUM_MIN){
+        sc.scrollLeft-=momentumOffset;
+        DOM.track.style.transform="";
+        momentumOffset=0;momentumRAF=null;
+        return;
+      }
+      momentumOffset+=vel;
+      var effective=sc.scrollLeft-momentumOffset;
+      if(effective<=0||effective>=maxSc){
+        var clamped=effective<=0?sc.scrollLeft:sc.scrollLeft-maxSc;
+        sc.scrollLeft-=clamped;
+        DOM.track.style.transform="";
+        momentumOffset=0;momentumRAF=null;
         var over=vel*6;
         over=Math.sign(over)*Math.min(Math.abs(over),35);
-        if(atRight)over=-Math.abs(over);
+        if(effective>=maxSc)over=-Math.abs(over);
         else over=Math.abs(over);
         if(Math.abs(over)>2)bounce(over);
         return;
       }
+      DOM.track.style.transform="translateX("+momentumOffset+"px)";
       momentumRAF=requestAnimationFrame(step);
     }
     momentumRAF=requestAnimationFrame(step);
   }
 
-  // ── Velocity tracker: son 100ms örnekleri ──
+  // ── Velocity tracker: ring buffer, 0 GC ──
   function createVelocityTracker(){
-    var samples=[];
+    var xs=new Float64Array(8),ts=new Float64Array(8);
+    var head=0,count=0;
     return {
       add:function(x){
-        var now=performance.now();
-        samples.push({x:x,t:now});
-        while(samples.length>0&&now-samples[0].t>100)samples.shift();
+        xs[head]=x;ts[head]=performance.now();
+        head=(head+1)&7;
+        if(count<8)count++;
       },
       get:function(){
-        if(samples.length<2)return 0;
-        var f=samples[0],l=samples[samples.length-1];
-        var dt=l.t-f.t;
+        if(count<2)return 0;
+        var now=performance.now(),oldest=-1,oi=0;
+        for(var i=0;i<count;i++){
+          var idx=(head-1-i+8)&7;
+          if(now-ts[idx]>80)break;
+          oldest=idx;oi=i;
+        }
+        if(oi<1)return 0;
+        var newest=(head-1+8)&7;
+        var dt=ts[newest]-ts[oldest];
         if(dt<1)return 0;
-        return(l.x-f.x)/dt*16.67;
+        return(xs[newest]-xs[oldest])/dt*16.67;
       },
-      reset:function(){samples=[];}
+      reset:function(){head=0;count=0;}
     };
   }
 
