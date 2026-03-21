@@ -675,6 +675,8 @@ var UI=(function(){
    ═══════════════════════════════════════════ */
 var Peek=(function(){
   var SCALE=0.6;
+  var storedFixedTop=0;
+  var CARD_AREA_OFFSET=52; // header height + padding approx
 
   function miniCards(list){
     var d=document.createElement("div");
@@ -689,10 +691,12 @@ var Peek=(function(){
     return d;
   }
 
+  var MASK_ALPHA=0.35;
+
   function applyMask(el,direction){
     el.style.filter="none";
-    el.style.opacity="0.45";
-    var grad="linear-gradient(to "+direction+", rgba(0,0,0,1) 30%, transparent 85%)";
+    el.style.opacity="1";
+    var grad="linear-gradient(to "+direction+", rgba(0,0,0,"+MASK_ALPHA+") 10%, transparent 70%)";
     el.style.maskImage=grad;
     el.style.webkitMaskImage=grad;
   }
@@ -717,6 +721,7 @@ var Peek=(function(){
   }
 
   function position(fixedTop){
+    storedFixedTop=fixedTop;
     DOM.peekBelow.style.top=(fixedTop+Config.CONTENT_HEIGHT+24)+"px";
     DOM.peekAbove.style.top=(fixedTop-70)+"px";
   }
@@ -726,7 +731,46 @@ var Peek=(function(){
     DOM.peekAbove.style.opacity="0";
   }
 
-  return {update:update,position:position,hide:hide};
+  // ── Morph: peek → gerçek kartlara dönüşüm ──
+
+  function animateStart(direction){
+    // up → peekBelow aktif (taskler aşağıda), down → peekAbove aktif (kategoriler yukarıda)
+    var active=direction==="up"?DOM.peekBelow:DOM.peekAbove;
+    var other=direction==="up"?DOM.peekAbove:DOM.peekBelow;
+    other.style.opacity="0";
+    if(!active.firstChild||active.style.opacity==="0")return null;
+    active.style.transition="none";
+    return active;
+  }
+
+  function animateProgress(el,progress,direction){
+    var p=Math.min(progress,1);
+    var s=SCALE+p*(1-SCALE); // 0.6 → 1.0
+    var peekTop=parseFloat(el.style.top);
+    var targetTop=storedFixedTop+CARD_AREA_OFFSET;
+    var dy=(targetTop-peekTop)*p;
+    el.style.transform="translateY("+dy+"px) scale("+s+")";
+    el.style.transformOrigin="left top";
+    // Mask gevşetme: alpha 0.35 → 1.0
+    var alpha=MASK_ALPHA+p*(1-MASK_ALPHA);
+    var startPct=10+p*40;
+    var endPct=70+p*30;
+    var dir=direction==="up"?"bottom":"top";
+    var grad="linear-gradient(to "+dir+", rgba(0,0,0,"+alpha+") "+startPct+"%, transparent "+endPct+"%)";
+    el.style.maskImage=grad;
+    el.style.webkitMaskImage=grad;
+  }
+
+  function animateEnd(el){
+    el.style.transform="none";
+    el.style.transition="opacity .3s";
+    el.style.maskImage="";
+    el.style.webkitMaskImage="";
+  }
+
+  return {update:update,position:position,hide:hide,
+          animateStart:animateStart,animateProgress:animateProgress,animateEnd:animateEnd,
+          SCALE:SCALE,MASK_ALPHA:MASK_ALPHA};
 })();
 
 
@@ -818,6 +862,7 @@ var Navigation=(function(){
   var snapshotEl=null;
   var viewReady=true;
   var swipeGen=0;
+  var activePeekEl=null;
   var EASE="cubic-bezier(.25,1,.5,1)";
 
   // ── Tek temizlik noktası — cancel() ile stale callback imkansız ──
@@ -827,6 +872,7 @@ var Navigation=(function(){
       currentAnim=null;
     }
     if(snapshotEl){snapshotEl.remove();snapshotEl=null;}
+    if(activePeekEl){Peek.animateEnd(activePeekEl);activePeekEl=null;}
     DOM.contentBlock.style.opacity="1";
     DOM.contentBlock.style.transform="none";
     viewReady=true;
@@ -870,7 +916,7 @@ var Navigation=(function(){
   // ── Tap ile crossfade (WAAPI — compositor thread) ──
   function crossfade(direction,prepareState){
     cleanup();
-    Peek.hide();
+    activePeekEl=Peek.animateStart(direction);
     var sign=direction==="down"?1:-1;
 
     createSnapshot();
@@ -887,13 +933,25 @@ var Navigation=(function(){
     ],{duration:250,easing:EASE,fill:"forwards"});
 
     currentAnim=[sA,bA];
+
+    // Peek morph: tap ile tek seferde 0→1 animasyonu
+    if(activePeekEl){
+      var peekTop=parseFloat(activePeekEl.style.top);
+      var targetY=parseFloat(DOM.contentBlock.style.top)+52-peekTop;
+      var pA=activePeekEl.animate([
+        {transform:"translateY(0) scale("+Peek.SCALE+")",opacity:1},
+        {transform:"translateY("+targetY+"px) scale(1)",opacity:0}
+      ],{duration:250,easing:EASE,fill:"forwards"});
+      currentAnim.push(pA);
+    }
+
     sA.onfinish=function(){cleanup();};
   }
 
   // ── Progressive swipe ──
   function startSwipe(direction){
     cleanup();
-    Peek.hide();
+    activePeekEl=Peek.animateStart(direction);
     swipeGen++;
     var myGen=swipeGen;
     viewReady=false;
@@ -922,6 +980,8 @@ var Navigation=(function(){
       DOM.contentBlock.style.opacity=String(p);
       DOM.contentBlock.style.transform="translate3d(0,"+(-sign*(1-p)*20)+"px,0)";
     }
+
+    if(activePeekEl)Peek.animateProgress(activePeekEl,p,direction);
   }
 
   function endSwipe(commit,direction){
@@ -944,7 +1004,16 @@ var Navigation=(function(){
         {opacity:1,transform:"translate3d(0,0,0)"}
       ],{duration:150,easing:EASE,fill:"forwards"});
 
-      currentAnim=[sA,bA];
+      // Peek morph tamamlama animasyonu
+      if(activePeekEl){
+        var pA=activePeekEl.animate([
+          {transform:activePeekEl.style.transform||"none",opacity:1},
+          {transform:"none",opacity:0}
+        ],{duration:150,easing:EASE,fill:"forwards"});
+        currentAnim=[sA,bA,pA];
+      }else{
+        currentAnim=[sA,bA];
+      }
       sA.onfinish=function(){cleanup();};
     }else{
       var sA=snapshotEl.animate([
