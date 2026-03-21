@@ -60,7 +60,7 @@ var Config={
   get SLOT(){return this.W+this.GAP;},
   PULL_THRESHOLD:68,
   PULL_MAX:90,
-  AXIS_THRESHOLD:8,
+  AXIS_THRESHOLD:4,
   AXIS_RATIO:1.5,
   MOMENTUM_FRICTION:0.985,
   MOMENTUM_MIN:0.5,
@@ -883,8 +883,14 @@ var Gestures=(function(){
   }
 
   function resetVisuals(){
+    var cur=DOM.track.style.transform;
+    DOM.track.style.transition="none";
     DOM.track.style.transform="";
-    DOM.track.style.transition="transform .3s cubic-bezier(.25,1,.5,1)";
+    if(cur&&cur!=="none"){
+      DOM.track.animate([
+        {transform:cur},{transform:"translateX(0)"}
+      ],{duration:300,easing:"cubic-bezier(.25,1,.5,1)"});
+    }
     DOM.pullIndicator.style.opacity="0";
     DOM.pullIndicator.style.transform="translateX(-56px) scale(.3)";
   }
@@ -925,7 +931,7 @@ var Gestures=(function(){
     bounceAnim=DOM.track.animate([
       {transform:"translateX("+overscrollPx+"px)"},
       {transform:"translateX(0)"}
-    ],{duration:350,easing:"cubic-bezier(.25,1,.5,1)"});
+    ],{duration:500,easing:"cubic-bezier(.32,1.2,.5,1)"});
     bounceAnim.onfinish=function(){bounceAnim=null;};
   }
 
@@ -960,8 +966,8 @@ var Gestures=(function(){
         sc.scrollLeft-=clamped;
         DOM.track.style.transform="";
         momentumOffset=0;momentumRAF=null;
-        var over=vel*6;
-        over=Math.sign(over)*Math.min(Math.abs(over),35);
+        var over=vel*10;
+        over=Math.sign(over)*Math.min(Math.abs(over),60);
         if(effective>=maxSc)over=-Math.abs(over);
         else over=Math.abs(over);
         if(Math.abs(over)>2)bounce(over);
@@ -1027,7 +1033,6 @@ var Gestures=(function(){
       if(!g.axis){
         g.axis=detectAxis(dx,dy);
         if(!g.axis)return;
-        if(g.axis==="x")g.lastX=t.clientX; // atlama önle
       }
 
       // ── YATAY: scroll veya pull-to-add ──
@@ -1046,8 +1051,8 @@ var Gestures=(function(){
           sc.scrollLeft-=frameDx;
           var clamped=sc.scrollLeft===before&&frameDx!==0;
           if(clamped){
-            g.overscroll=(g.overscroll||0)+frameDx*0.35;
-            g.overscroll=Math.sign(g.overscroll)*Math.min(Math.abs(g.overscroll),40);
+            g.overscroll=(g.overscroll||0)+frameDx*0.5;
+            g.overscroll=Math.sign(g.overscroll)*Math.min(Math.abs(g.overscroll),80);
             DOM.track.style.transform="translateX("+g.overscroll+"px)";
           }else if(g.overscroll){
             g.overscroll=0;
@@ -1086,9 +1091,12 @@ var Gestures=(function(){
         }else if(g.pulling){
           resetVisuals();
         }else{
-          var v=vel.get();
-          if(Math.abs(v)>Config.MOMENTUM_MIN)startMomentum(v);
-          else if(g.overscroll&&Math.abs(g.overscroll)>1)bounce(g.overscroll);
+          if(g.overscroll&&Math.abs(g.overscroll)>2){
+            bounce(g.overscroll);
+          }else{
+            var v=vel.get();
+            if(Math.abs(v)>Config.MOMENTUM_MIN)startMomentum(v);
+          }
         }
       }
 
@@ -1124,7 +1132,6 @@ var Gestures=(function(){
       if(!g.axis){
         g.axis=detectAxis(dx,dy);
         if(!g.axis)return;
-        if(g.axis==="x")g.lastX=e.clientX;
       }
       if(g.axis!=="x")return;
 
@@ -1139,8 +1146,8 @@ var Gestures=(function(){
         sc.scrollLeft-=frameDx;
         var clamped=sc.scrollLeft===before&&frameDx!==0;
         if(clamped){
-          g.overscroll=(g.overscroll||0)+frameDx*0.35;
-          g.overscroll=Math.sign(g.overscroll)*Math.min(Math.abs(g.overscroll),40);
+          g.overscroll=(g.overscroll||0)+frameDx*0.5;
+          g.overscroll=Math.sign(g.overscroll)*Math.min(Math.abs(g.overscroll),80);
           DOM.track.style.transform="translateX("+g.overscroll+"px)";
         }else if(g.overscroll){
           g.overscroll=0;
@@ -1155,7 +1162,7 @@ var Gestures=(function(){
         commitPull(g.pullVal||0);
       }else if(g.pulling){
         resetVisuals();
-      }else if(g.overscroll&&Math.abs(g.overscroll)>1){
+      }else if(g.overscroll&&Math.abs(g.overscroll)>2){
         bounce(g.overscroll);
       }
       g={active:false};
