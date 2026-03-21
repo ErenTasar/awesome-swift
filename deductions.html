@@ -16,7 +16,7 @@ input::placeholder{color:rgba(255,255,255,.3)}
 <body>
 <div id="root">
   <div id="appContainer" style="position:fixed;top:0;left:0;right:0;height:100%;background:#000;overflow:hidden;font-family:-apple-system,'SF Pro Rounded','SF Pro Display',BlinkMacSystemFont,sans-serif">
-    <div style="position:absolute;left:0;right:0;top:130px">
+    <div id="contentBlock" style="position:absolute;left:0;right:0;top:130px">
       <div style="padding:0 20px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
         <div>
           <h1 style="font-size:26px;font-weight:700;color:#fff;margin:0;letter-spacing:-.025em">Görevler</h1>
@@ -42,13 +42,20 @@ input::placeholder{color:rgba(255,255,255,.3)}
 
 <script>
 (function(){
-// --- Layout stabilizasyonu: Safari klavye açılınca sayfayı scroll etmesin ---
+// --- Layout stabilizasyonu + responsive dikey ortalama ---
 var appContainer=document.getElementById("appContainer");
+var contentBlock=document.getElementById("contentBlock");
 var initialHeight=window.innerHeight;
+var CONTENT_HEIGHT=190; // başlık(~50) + kartlar(~124) + padding(~16)
 appContainer.style.height=initialHeight+"px";
 
-// Safari sayfayı yukarı kaydırdığında, visualViewport.offsetTop artar.
-// Bunu container'ı aşağı kaydırarak telafi ediyoruz.
+function positionContent(){
+var visibleH=window.visualViewport?window.visualViewport.height:window.innerHeight;
+var top=Math.max(40,Math.round((visibleH-CONTENT_HEIGHT)/2));
+contentBlock.style.top=top+"px";
+}
+positionContent();
+
 function compensateScroll(){
 if(window.visualViewport){
 var offset=window.visualViewport.offsetTop;
@@ -62,13 +69,13 @@ document.body.scrollTop=0;
 if(window.visualViewport){
 window.visualViewport.addEventListener("resize",function(){
 appContainer.style.height=initialHeight+"px";
+positionContent();
 compensateScroll();
 });
 window.visualViewport.addEventListener("scroll",function(){
 compensateScroll();
 });
 }
-// Fallback: window scroll'u da engelle
 window.addEventListener("scroll",function(){
 window.scrollTo(0,0);
 compensateScroll();
