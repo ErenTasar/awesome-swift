@@ -15,7 +15,7 @@ input::placeholder{color:rgba(255,255,255,.3)}
 <body>
 <div id="root">
   <div id="appContainer" style="position:fixed;top:0;left:0;right:0;height:100%;background:#000;overflow:hidden;font-family:-apple-system,'SF Pro Rounded','SF Pro Display',BlinkMacSystemFont,sans-serif">
-    <div id="contentBlock" style="position:absolute;left:0;right:0;top:130px">
+    <div id="contentBlock" style="position:absolute;left:0;right:0;top:130px;will-change:opacity,transform">
       <div style="padding:0 20px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
         <div>
           <h1 id="viewTitle" style="font-size:26px;font-weight:700;color:#fff;margin:0;letter-spacing:-.025em">Kategoriler</h1>
@@ -673,26 +673,41 @@ var TodoManager={
 var Navigation=(function(){
   var transitioning=false;
   var snapshotEl=null;
+  var viewReady=true;
+  var safetyTimer=null;
   var ease="cubic-bezier(.25,1,.5,1)";
+  var T3D="translate3d(0,";
 
-  // ── Snapshot: mevcut view'ın görsel klonu ──
+  // ── Güvenli temizlik — her durumda çağrılabilir ──
+  function forceCleanup(){
+    if(snapshotEl){snapshotEl.remove();snapshotEl=null;}
+    var b=DOM.contentBlock;
+    b.style.transition="none";
+    b.style.opacity="1";
+    b.style.transform=T3D+"0,0)";
+    transitioning=false;
+    viewReady=true;
+    if(safetyTimer){clearTimeout(safetyTimer);safetyTimer=null;}
+  }
+
+  function startSafety(ms){
+    if(safetyTimer)clearTimeout(safetyTimer);
+    safetyTimer=setTimeout(forceCleanup,ms||600);
+  }
+
+  // ── Snapshot: GPU-accelerated görsel klon ──
   function createSnapshot(){
+    if(snapshotEl)snapshotEl.remove(); // eski snapshot varsa temizle
     var origSL=DOM.scrollContainer.scrollLeft;
     var clone=DOM.contentBlock.cloneNode(true);
-    // Scroll pozisyonunu koru
     var cloneSc=clone.querySelector("#scrollContainer");
     if(cloneSc)cloneSc.scrollLeft=origSL;
-    // Duplicate ID'leri temizle
     clone.querySelectorAll("[id]").forEach(function(el){el.removeAttribute("id");});
     clone.style.pointerEvents="none";
     clone.style.zIndex="10";
+    clone.style.willChange="opacity,transform";
     DOM.appContainer.appendChild(clone);
     snapshotEl=clone;
-    return clone;
-  }
-
-  function removeSnapshot(){
-    if(snapshotEl){snapshotEl.remove();snapshotEl=null;}
   }
 
   function updateHeader(){
@@ -701,11 +716,9 @@ var Navigation=(function(){
 
   function swapView(direction){
     if(direction==="down"){
-      State.view="categories";
-      State.currentCategory=null;
+      State.view="categories";State.currentCategory=null;
     }else{
-      State.view="tasks";
-      State.currentCategory=State.lastCategory;
+      State.view="tasks";State.currentCategory=State.lastCategory;
     }
     updateHeader();
     UI.renderAll();
@@ -713,73 +726,72 @@ var Navigation=(function(){
 
   function revertView(direction){
     if(direction==="down"){
-      // tasks→categories gidiyordu, geri: tasks'e dön
-      State.view="tasks";
-      State.currentCategory=State.lastCategory;
+      State.view="tasks";State.currentCategory=State.lastCategory;
     }else{
-      // categories→tasks gidiyordu, geri: categories'e dön
-      State.view="categories";
-      State.currentCategory=null;
+      State.view="categories";State.currentCategory=null;
     }
     updateHeader();
     UI.renderAll();
   }
 
-  // ── Tap ile crossfade geçiş ──
+  // ── Tap ile crossfade ──
   function crossfade(direction,prepareState){
-    if(transitioning)return;
+    if(transitioning)forceCleanup();
     transitioning=true;
+    startSafety(500);
     var sign=direction==="down"?1:-1;
-    var block=DOM.contentBlock;
+    var b=DOM.contentBlock;
 
-    // 1. Snapshot (eski view)
     createSnapshot();
+    snapshotEl.style.transition="none";
+    snapshotEl.style.opacity="1";
+    snapshotEl.style.transform=T3D+"0,0)";
 
-    // 2. State swap + re-render (contentBlock = yeni view)
     prepareState();
 
-    // 3. Yeni view: başlangıç pozisyonu
-    block.style.transition="none";
-    block.style.opacity="0";
-    block.style.transform="translateY("+(-sign*20)+"px)";
+    b.style.transition="none";
+    b.style.opacity="0";
+    b.style.transform=T3D+(-sign*20)+"px,0)";
 
-    // 4. Eşzamanlı crossfade
     requestAnimationFrame(function(){
-      requestAnimationFrame(function(){
-        // Eski view (snapshot) fade-out
-        snapshotEl.style.transition="opacity .28s ease, transform .28s "+ease;
-        snapshotEl.style.opacity="0";
-        snapshotEl.style.transform="translateY("+(sign*25)+"px)";
+      if(!snapshotEl)return; // forceCleanup çağrıldıysa
+      snapshotEl.style.transition="opacity .25s ease,transform .25s "+ease;
+      snapshotEl.style.opacity="0";
+      snapshotEl.style.transform=T3D+(sign*25)+"px,0)";
 
-        // Yeni view fade-in
-        block.style.transition="opacity .28s ease, transform .28s "+ease;
-        block.style.opacity="1";
-        block.style.transform="translateY(0)";
+      b.style.transition="opacity .25s ease,transform .25s "+ease;
+      b.style.opacity="1";
+      b.style.transform=T3D+"0,0)";
 
-        setTimeout(function(){
-          removeSnapshot();
-          transitioning=false;
-        },300);
-      });
+      setTimeout(function(){
+        if(snapshotEl){snapshotEl.remove();snapshotEl=null;}
+        transitioning=false;
+        if(safetyTimer){clearTimeout(safetyTimer);safetyTimer=null;}
+      },270);
     });
   }
 
   // ── Progressive swipe ──
   function startSwipe(direction){
-    if(transitioning)return;
+    if(transitioning)forceCleanup();
+    transitioning=true;
+    viewReady=false;
+    startSafety(800);
     var sign=direction==="down"?1:-1;
+    var b=DOM.contentBlock;
 
-    // Snapshot oluştur (eski view)
+    // Frame 1: snapshot oluştur, contentBlock'u gizle
     createSnapshot();
     snapshotEl.style.transition="none";
+    b.style.transition="none";
+    b.style.opacity="0";
+    b.style.transform=T3D+(-sign*20)+"px,0)";
 
-    // State swap + re-render (contentBlock = yeni view)
-    swapView(direction);
-
-    // Yeni view gizli başlar
-    DOM.contentBlock.style.transition="none";
-    DOM.contentBlock.style.opacity="0";
-    DOM.contentBlock.style.transform="translateY("+(-sign*20)+"px)";
+    // Frame 2: ağır DOM işi (re-render) — kullanıcı görmez çünkü snapshot üstte
+    requestAnimationFrame(function(){
+      swapView(direction);
+      viewReady=true;
+    });
   }
 
   function updateSwipe(progress,direction){
@@ -787,60 +799,60 @@ var Navigation=(function(){
     var p=Math.min(progress,1);
     var sign=direction==="down"?1:-1;
 
-    // Eski view (snapshot): soluklaş + kay
-    snapshotEl.style.transition="none";
+    // Snapshot (eski view): soluklaş + kay
     snapshotEl.style.opacity=String(1-p);
-    snapshotEl.style.transform="translateY("+(sign*p*25)+"px)";
+    snapshotEl.style.transform=T3D+(sign*p*25)+"px,0)";
 
-    // Yeni view (contentBlock): belirginleş + yaklaş
-    DOM.contentBlock.style.transition="none";
-    DOM.contentBlock.style.opacity=String(p);
-    DOM.contentBlock.style.transform="translateY("+(-sign*(1-p)*20)+"px)";
+    // Yeni view: sadece render tamamsa güncelle
+    if(viewReady){
+      DOM.contentBlock.style.opacity=String(p);
+      DOM.contentBlock.style.transform=T3D+(-sign*(1-p)*20)+"px,0)";
+    }
   }
 
   function endSwipe(commit,direction){
     if(!snapshotEl){
-      // snapshot yoksa (startSwipe çağrılmamış) ignore
+      // snapshot yok: state bozuksa resetle
+      forceCleanup();
       return;
     }
     var sign=direction==="down"?1:-1;
-    var block=DOM.contentBlock;
+    var b=DOM.contentBlock;
 
     if(commit){
-      transitioning=true;
-      // Crossfade'i tamamla
-      snapshotEl.style.transition="opacity .18s ease, transform .18s "+ease;
+      // Crossfade tamamla
+      snapshotEl.style.transition="opacity .16s ease,transform .16s "+ease;
       snapshotEl.style.opacity="0";
-      snapshotEl.style.transform="translateY("+(sign*30)+"px)";
+      snapshotEl.style.transform=T3D+(sign*30)+"px,0)";
 
-      block.style.transition="opacity .18s ease, transform .18s "+ease;
-      block.style.opacity="1";
-      block.style.transform="translateY(0)";
+      b.style.transition="opacity .16s ease,transform .16s "+ease;
+      b.style.opacity="1";
+      b.style.transform=T3D+"0,0)";
 
       setTimeout(function(){
-        removeSnapshot();
+        if(snapshotEl){snapshotEl.remove();snapshotEl=null;}
         transitioning=false;
-      },200);
+        if(safetyTimer){clearTimeout(safetyTimer);safetyTimer=null;}
+      },180);
     }else{
-      // Geri al: eski view'a dön
-      transitioning=true;
-      snapshotEl.style.transition="opacity .22s ease, transform .22s "+ease;
+      // Geri al
+      snapshotEl.style.transition="opacity .18s ease,transform .18s "+ease;
       snapshotEl.style.opacity="1";
-      snapshotEl.style.transform="translateY(0)";
+      snapshotEl.style.transform=T3D+"0,0)";
 
-      block.style.transition="opacity .22s ease, transform .22s "+ease;
-      block.style.opacity="0";
-      block.style.transform="translateY("+(-sign*20)+"px)";
+      b.style.transition="opacity .18s ease,transform .18s "+ease;
+      b.style.opacity="0";
+      b.style.transform=T3D+(-sign*20)+"px,0)";
 
       setTimeout(function(){
-        // State'i eski haline döndür
         revertView(direction);
-        block.style.transition="none";
-        block.style.opacity="1";
-        block.style.transform="translateY(0)";
-        removeSnapshot();
+        b.style.transition="none";
+        b.style.opacity="1";
+        b.style.transform=T3D+"0,0)";
+        if(snapshotEl){snapshotEl.remove();snapshotEl=null;}
         transitioning=false;
-      },240);
+        if(safetyTimer){clearTimeout(safetyTimer);safetyTimer=null;}
+      },200);
     }
   }
 
@@ -865,6 +877,7 @@ var Navigation=(function(){
     startSwipe:startSwipe,
     updateSwipe:updateSwipe,
     endSwipe:endSwipe,
+    forceCleanup:forceCleanup,
     isTransitioning:function(){return transitioning;}
   };
 })();
@@ -1032,6 +1045,11 @@ var Gestures=(function(){
         var progress=Math.min(Math.abs(vg.dy)/200,1);
         Navigation.endSwipe(progress>0.2,vg.direction);
       }
+      vg={active:false};
+    },{passive:true});
+
+    DOM.appContainer.addEventListener("touchcancel",function(){
+      if(vg.swiping)Navigation.endSwipe(false,vg.direction);
       vg={active:false};
     },{passive:true});
   }
