@@ -1033,11 +1033,13 @@ var Gestures=(function(){
 
     // ── TOUCH: hepsi appContainer üzerinde ──
     ac.addEventListener("touchstart",function(e){
-      if(isInteractive(e.target))return;
+      var fromNewCardInput=State.adding&&e.target.closest(".new-card")&&isInteractive(e.target);
+      if(!fromNewCardInput&&isInteractive(e.target))return;
       cancelMomentum();cancelBounce();
       var t=e.touches[0];
       g={active:true,pulling:false,startX:t.clientX,startY:t.clientY,lastX:t.clientX,
-         axis:null,dy:0,swiping:false,direction:null,pullVal:0,scrollStart:sc.scrollLeft};
+         axis:null,dy:0,swiping:false,direction:null,pullVal:0,scrollStart:sc.scrollLeft,
+         fromNewCardInput:!!fromNewCardInput};
       vel.reset();
       vel.add(t.clientX);
     },{passive:true});
@@ -1047,6 +1049,24 @@ var Gestures=(function(){
       var t=e.touches[0];
       var dx=t.clientX-g.startX;
       var dy=t.clientY-g.startY;
+
+      // new-card input'undan başlayan gesture: sadece yatay swipe ise devral
+      if(g.fromNewCardInput){
+        if(!g.axis){
+          g.axis=detectAxis(dx,dy);
+          if(!g.axis)return; // henüz belirsiz — input'a müdahale etme
+          if(g.axis==="y"){
+            g.active=false; // dikey → gesture iptal, input çalışsın
+            return;
+          }
+          // axis=x → yatay swipe! Input'tan devral
+          var nc=DOM.queryNewCard();
+          if(nc&&nc._markSubmitted)nc._markSubmitted();
+          if(nc&&nc._blankInput)nc._blankInput.blur();
+          g.fromNewCardInput=false;
+        }
+        if(!g.axis)return;
+      }
 
       if(!g.axis){
         g.axis=detectAxis(dx,dy);
@@ -1142,19 +1162,39 @@ var Gestures=(function(){
 
     // ── MOUSE: appContainer üzerinde ──
     ac.addEventListener("mousedown",function(e){
-      if(isInteractive(e.target))return;
+      var fromNewCardInput=State.adding&&e.target.closest(".new-card")&&isInteractive(e.target);
+      if(!fromNewCardInput&&isInteractive(e.target))return;
       cancelMomentum();cancelBounce();
       g={active:true,pulling:false,startX:e.clientX,startY:e.clientY,lastX:e.clientX,
-         axis:null,mouse:true,pullVal:0,scrollStart:sc.scrollLeft};
+         axis:null,mouse:true,pullVal:0,scrollStart:sc.scrollLeft,
+         fromNewCardInput:!!fromNewCardInput};
       vel.reset();
       vel.add(e.clientX);
-      e.preventDefault();
+      if(!fromNewCardInput)e.preventDefault();
     });
 
     window.addEventListener("mousemove",function(e){
       if(!g.active||!g.mouse)return;
       var dx=e.clientX-g.startX;
       var dy=e.clientY-g.startY;
+
+      // new-card input'undan başlayan gesture: sadece yatay swipe ise devral
+      if(g.fromNewCardInput){
+        if(!g.axis){
+          g.axis=detectAxis(dx,dy);
+          if(!g.axis)return;
+          if(g.axis!=="x"){
+            g.active=false;
+            return;
+          }
+          var nc=DOM.queryNewCard();
+          if(nc&&nc._markSubmitted)nc._markSubmitted();
+          if(nc&&nc._blankInput)nc._blankInput.blur();
+          g.fromNewCardInput=false;
+          e.preventDefault();
+        }
+        if(!g.axis)return;
+      }
 
       if(!g.axis){
         g.axis=detectAxis(dx,dy);
