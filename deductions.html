@@ -103,8 +103,6 @@ var State={
   nextCategoryId:4,
   adding:false,
   addingLock:false,
-  consecutiveAdding:false,
-  _pendingBlankColor:null,
 
   activeList:function(){
     return this.view==="categories"?this.categories
@@ -348,10 +346,7 @@ var CardFactory=(function(){
 
     var submitted=false;
     function submit(){
-      if(submitted)return;
-      // Ardışık modda blur tetiklenirse, confirmAndContinue zaten halledecek — skip et
-      if(State.consecutiveAdding)return;
-      submitted=true;
+      if(submitted)return;submitted=true;
       var v=(input.value||"").trim();
       if(v){TodoManager.confirm(v,color);}
       else{TodoManager.cancel();}
@@ -362,7 +357,7 @@ var CardFactory=(function(){
     collapser._markSubmitted=function(){submitted=true;};
     input.addEventListener("keydown",function(e){
       if(e.key==="Enter"){e.preventDefault();submit();}
-      if(e.key==="Escape"){submitted=true;State.consecutiveAdding=false;TodoManager.cancel();}
+      if(e.key==="Escape"){submitted=true;TodoManager.cancel();}
     });
     input.addEventListener("blur",function(){setTimeout(submit,250);});
 
@@ -671,33 +666,24 @@ var TodoManager={
   },
 
   // Ardışık ekleme: mevcut task'ı onayla ve hemen yeni blank card aç
+  // Ardışık ekleme: mevcut task'ı onayla ve hemen yeni blank card aç
   confirmAndContinue:function(pullWidth){
     var nc=DOM.queryNewCard();
     if(!nc||!nc._blankInput)return false;
 
-    var text=(nc._blankInput.value||"").trim();
-    if(!text){
-      // Boş text → ardışık modu durdur, iptal et
-      State.consecutiveAdding=false;
-      return false;
-    }
-
-    var color=nc._blankColor;
-    // Blur handler'ın tekrar çalışmasını engelle
+    // HER DURUMDA blur handler'ı engelle (submitted=true)
     nc._markSubmitted();
-    State.consecutiveAdding=true;
 
-    // Mevcut task'ı onayla
-    this.confirm(text,color);
+    var text=(nc._blankInput.value||"").trim();
+    if(!text) return false;
 
-    // Hemen yeni blank card aç
+    this.confirm(text,nc._blankColor);
     this.add(pullWidth);
     return true;
   },
 
   cancel:function(){
     State.adding=false;State.addingLock=false;
-    State.consecutiveAdding=false;
     var nc=DOM.queryNewCard();
     var list=State.activeList();
     if(!nc){UI.updateSubtitle();if(list.length===0)UI.showEmptyState();return;}
@@ -953,8 +939,6 @@ var Gestures=(function(){
   }
 
   function isInteractive(target){
-    // Ardışık ekleme modunda input üzerinden de pull gesture başlatılabilmeli
-    if(State.adding&&target.closest(".new-card"))return false;
     return target.closest("button")||target.closest("input");
   }
 
