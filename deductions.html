@@ -671,38 +671,28 @@ var TodoManager={
    NAVIGATION — görünüm geçişleri
    ═══════════════════════════════════════════ */
 var Navigation=(function(){
-  var transitioning=false;
+  var currentAnim=null;
   var snapshotEl=null;
   var viewReady=true;
-  var safetyTimer=null;
-  var ease="cubic-bezier(.25,1,.5,1)";
-  var T3D="translate3d(0,";
+  var swipeGen=0;
+  var EASE="cubic-bezier(.25,1,.5,1)";
 
-  // ── Güvenli temizlik — her durumda çağrılabilir ──
-  function forceCleanup(){
+  // ── Tek temizlik noktası — cancel() ile stale callback imkansız ──
+  function cleanup(){
+    if(currentAnim){
+      currentAnim.forEach(function(a){try{a.cancel();}catch(e){}});
+      currentAnim=null;
+    }
     if(snapshotEl){snapshotEl.remove();snapshotEl=null;}
-    var b=DOM.contentBlock;
-    b.style.transition="none";
-    b.style.opacity="1";
-    b.style.transform=T3D+"0,0)";
-    transitioning=false;
+    DOM.contentBlock.style.opacity="1";
+    DOM.contentBlock.style.transform="none";
     viewReady=true;
-    if(safetyTimer){clearTimeout(safetyTimer);safetyTimer=null;}
   }
 
-  function startSafety(ms){
-    if(safetyTimer)clearTimeout(safetyTimer);
-    safetyTimer=setTimeout(forceCleanup,ms||600);
-  }
-
-  // ── Snapshot: GPU-accelerated görsel klon ──
+  // ── Snapshot: hafif klon ──
   function createSnapshot(){
-    if(snapshotEl)snapshotEl.remove(); // eski snapshot varsa temizle
-    var origSL=DOM.scrollContainer.scrollLeft;
+    if(snapshotEl)snapshotEl.remove();
     var clone=DOM.contentBlock.cloneNode(true);
-    var cloneSc=clone.querySelector("#scrollContainer");
-    if(cloneSc)cloneSc.scrollLeft=origSL;
-    clone.querySelectorAll("[id]").forEach(function(el){el.removeAttribute("id");});
     clone.style.pointerEvents="none";
     clone.style.zIndex="10";
     clone.style.willChange="opacity,transform";
@@ -734,61 +724,42 @@ var Navigation=(function(){
     UI.renderAll();
   }
 
-  // ── Tap ile crossfade ──
+  // ── Tap ile crossfade (WAAPI — compositor thread) ──
   function crossfade(direction,prepareState){
-    if(transitioning)forceCleanup();
-    transitioning=true;
-    startSafety(500);
+    cleanup();
     var sign=direction==="down"?1:-1;
-    var b=DOM.contentBlock;
 
     createSnapshot();
-    snapshotEl.style.transition="none";
-    snapshotEl.style.opacity="1";
-    snapshotEl.style.transform=T3D+"0,0)";
-
     prepareState();
 
-    b.style.transition="none";
-    b.style.opacity="0";
-    b.style.transform=T3D+(-sign*20)+"px,0)";
+    var sA=snapshotEl.animate([
+      {opacity:1,transform:"translate3d(0,0,0)"},
+      {opacity:0,transform:"translate3d(0,"+(sign*25)+"px,0)"}
+    ],{duration:250,easing:EASE,fill:"forwards"});
 
-    requestAnimationFrame(function(){
-      if(!snapshotEl)return; // forceCleanup çağrıldıysa
-      snapshotEl.style.transition="opacity .25s ease,transform .25s "+ease;
-      snapshotEl.style.opacity="0";
-      snapshotEl.style.transform=T3D+(sign*25)+"px,0)";
+    var bA=DOM.contentBlock.animate([
+      {opacity:0,transform:"translate3d(0,"+(-sign*20)+"px,0)"},
+      {opacity:1,transform:"translate3d(0,0,0)"}
+    ],{duration:250,easing:EASE,fill:"forwards"});
 
-      b.style.transition="opacity .25s ease,transform .25s "+ease;
-      b.style.opacity="1";
-      b.style.transform=T3D+"0,0)";
-
-      setTimeout(function(){
-        if(snapshotEl){snapshotEl.remove();snapshotEl=null;}
-        transitioning=false;
-        if(safetyTimer){clearTimeout(safetyTimer);safetyTimer=null;}
-      },270);
-    });
+    currentAnim=[sA,bA];
+    sA.onfinish=function(){cleanup();};
   }
 
   // ── Progressive swipe ──
   function startSwipe(direction){
-    if(transitioning)forceCleanup();
-    transitioning=true;
+    cleanup();
+    swipeGen++;
+    var myGen=swipeGen;
     viewReady=false;
-    startSafety(800);
     var sign=direction==="down"?1:-1;
-    var b=DOM.contentBlock;
 
-    // Frame 1: snapshot oluştur, contentBlock'u gizle
     createSnapshot();
-    snapshotEl.style.transition="none";
-    b.style.transition="none";
-    b.style.opacity="0";
-    b.style.transform=T3D+(-sign*20)+"px,0)";
+    DOM.contentBlock.style.opacity="0";
+    DOM.contentBlock.style.transform="translate3d(0,"+(-sign*20)+"px,0)";
 
-    // Frame 2: ağır DOM işi (re-render) — kullanıcı görmez çünkü snapshot üstte
     requestAnimationFrame(function(){
+      if(swipeGen!==myGen)return;
       swapView(direction);
       viewReady=true;
     });
@@ -799,60 +770,53 @@ var Navigation=(function(){
     var p=Math.min(progress,1);
     var sign=direction==="down"?1:-1;
 
-    // Snapshot (eski view): soluklaş + kay
     snapshotEl.style.opacity=String(1-p);
-    snapshotEl.style.transform=T3D+(sign*p*25)+"px,0)";
+    snapshotEl.style.transform="translate3d(0,"+(sign*p*25)+"px,0)";
 
-    // Yeni view: sadece render tamamsa güncelle
     if(viewReady){
       DOM.contentBlock.style.opacity=String(p);
-      DOM.contentBlock.style.transform=T3D+(-sign*(1-p)*20)+"px,0)";
+      DOM.contentBlock.style.transform="translate3d(0,"+(-sign*(1-p)*20)+"px,0)";
     }
   }
 
   function endSwipe(commit,direction){
-    if(!snapshotEl){
-      // snapshot yok: state bozuksa resetle
-      forceCleanup();
-      return;
-    }
+    if(!snapshotEl){cleanup();return;}
     var sign=direction==="down"?1:-1;
     var b=DOM.contentBlock;
+    var sOp=snapshotEl.style.opacity||"1";
+    var sTr=snapshotEl.style.transform||"none";
+    var bOp=b.style.opacity||"0";
+    var bTr=b.style.transform||"none";
 
     if(commit){
-      // Crossfade tamamla
-      snapshotEl.style.transition="opacity .16s ease,transform .16s "+ease;
-      snapshotEl.style.opacity="0";
-      snapshotEl.style.transform=T3D+(sign*30)+"px,0)";
+      var sA=snapshotEl.animate([
+        {opacity:sOp,transform:sTr},
+        {opacity:0,transform:"translate3d(0,"+(sign*30)+"px,0)"}
+      ],{duration:150,easing:EASE,fill:"forwards"});
 
-      b.style.transition="opacity .16s ease,transform .16s "+ease;
-      b.style.opacity="1";
-      b.style.transform=T3D+"0,0)";
+      var bA=b.animate([
+        {opacity:bOp,transform:bTr},
+        {opacity:1,transform:"translate3d(0,0,0)"}
+      ],{duration:150,easing:EASE,fill:"forwards"});
 
-      setTimeout(function(){
-        if(snapshotEl){snapshotEl.remove();snapshotEl=null;}
-        transitioning=false;
-        if(safetyTimer){clearTimeout(safetyTimer);safetyTimer=null;}
-      },180);
+      currentAnim=[sA,bA];
+      sA.onfinish=function(){cleanup();};
     }else{
-      // Geri al
-      snapshotEl.style.transition="opacity .18s ease,transform .18s "+ease;
-      snapshotEl.style.opacity="1";
-      snapshotEl.style.transform=T3D+"0,0)";
+      var sA=snapshotEl.animate([
+        {opacity:sOp,transform:sTr},
+        {opacity:1,transform:"translate3d(0,0,0)"}
+      ],{duration:180,easing:EASE,fill:"forwards"});
 
-      b.style.transition="opacity .18s ease,transform .18s "+ease;
-      b.style.opacity="0";
-      b.style.transform=T3D+(-sign*20)+"px,0)";
+      var bA=b.animate([
+        {opacity:bOp,transform:bTr},
+        {opacity:0,transform:"translate3d(0,"+(-sign*20)+"px,0)"}
+      ],{duration:180,easing:EASE,fill:"forwards"});
 
-      setTimeout(function(){
+      currentAnim=[sA,bA];
+      bA.onfinish=function(){
         revertView(direction);
-        b.style.transition="none";
-        b.style.opacity="1";
-        b.style.transform=T3D+"0,0)";
-        if(snapshotEl){snapshotEl.remove();snapshotEl=null;}
-        transitioning=false;
-        if(safetyTimer){clearTimeout(safetyTimer);safetyTimer=null;}
-      },200);
+        cleanup();
+      };
     }
   }
 
@@ -877,8 +841,8 @@ var Navigation=(function(){
     startSwipe:startSwipe,
     updateSwipe:updateSwipe,
     endSwipe:endSwipe,
-    forceCleanup:forceCleanup,
-    isTransitioning:function(){return transitioning;}
+    cleanup:cleanup,
+    isTransitioning:function(){return currentAnim!==null;}
   };
 })();
 
