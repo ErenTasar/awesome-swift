@@ -949,9 +949,9 @@ var Gestures=(function(){
       var dt=now-lastT;lastT=now;
       vel*=Math.pow(Config.MOMENTUM_FRICTION,dt/16.67);
       if(Math.abs(vel)<Config.MOMENTUM_MIN){momentumRAF=null;return;}
-      var before=sc.scrollLeft;
       sc.scrollLeft-=vel;
-      if(sc.scrollLeft===before){
+      var maxSc=sc.scrollWidth-sc.clientWidth;
+      if((sc.scrollLeft<=0&&vel>0)||(sc.scrollLeft>=maxSc&&vel<0)){
         momentumRAF=null;
         var over=vel*8;
         over=Math.sign(over)*Math.min(Math.abs(over),50);
