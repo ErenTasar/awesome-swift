@@ -322,13 +322,12 @@ transition:"width .3s cubic-bezier(.34,1.2,.64,1)",
 });
 collapser.className="new-card";
 
-// İç kart (görsel)
+// İç kart (görsel) — fade-out'un ayna simetrisi
 const card=document.createElement("div");
 Object.assign(card.style,{
 width:W+"px",height:H+"px",borderRadius:R+"px",marginRight:GAP+"px",
 background:color.bg,position:"relative",overflow:"hidden",flexShrink:"0",
-opacity:"0",transform:"scale(.7)",
-transition:"opacity .25s ease .08s, transform .25s cubic-bezier(.34,1.56,.64,1) .08s",
+opacity:"0",transform:"scale(.85) translateY(6px)",
 });
 
 card.appendChild(createScratchesSVG(color.accent));
@@ -345,7 +344,7 @@ fontWeight:"600",fontSize:"16px",color:"#fff",lineHeight:"1.22",letterSpacing:"-
 background:"transparent",border:"none",outline:"none",padding:"0",margin:"0",width:"100%",
 caretColor:"transparent",fontFamily:"inherit",
 });
-setTimeout(function(){input.style.caretColor="#fff";},320);
+setTimeout(function(){input.style.caretColor="#fff";},620);
 
 let submitted=false;
 function submit(){
@@ -368,14 +367,18 @@ content.appendChild(input);
 card.appendChild(content);
 collapser.appendChild(card);
 
-// Animate in: width expand + fade+scale
+// Animate in: width expand, then fade+scale (fade-out'un simetrisi)
 requestAnimationFrame(function(){
 requestAnimationFrame(function(){
 collapser.style.width=(W+GAP)+"px";
+});
+});
+// Width açıldıktan sonra kart fade-in (fade-out'taki .3s timing'in aynısı)
+setTimeout(function(){
+card.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
 card.style.opacity="1";
-card.style.transform="scale(1)";
-});
-});
+card.style.transform="scale(1) translateY(0)";
+},320);
 
 // Focus transfer: proxy zaten klavyeyi açtı, şimdi gerçek input'a geç
 requestAnimationFrame(function(){
