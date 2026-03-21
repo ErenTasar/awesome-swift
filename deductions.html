@@ -675,6 +675,7 @@ var UI=(function(){
    ═══════════════════════════════════════════ */
 var Peek=(function(){
   var SCALE=0.75;
+  var SCALE_H=0.6;
   var storedFixedTop=0;
   var CARD_AREA_OFFSET=52;
   var MASK_ALPHA_ABOVE=0.32;
@@ -687,8 +688,8 @@ var Peek=(function(){
     d.style.cssText="display:flex;gap:"+(Config.GAP*SCALE)+"px;padding-left:"+(20*SCALE)+"px";
     list.forEach(function(item){
       var c=document.createElement("div");
-      c.style.cssText="width:"+(Config.W*SCALE)+"px;height:"+(Config.H*SCALE)
-        +"px;border-radius:"+(Config.R*SCALE)+"px;background:"+item.color.bg
+      c.style.cssText="width:"+(Config.W*SCALE)+"px;height:"+(Config.H*SCALE_H)
+        +"px;border-radius:"+(Config.R*SCALE_H)+"px;background:"+item.color.bg
         +";flex-shrink:0";
       d.appendChild(c);
     });
@@ -742,6 +743,30 @@ var Peek=(function(){
     if(belowInner)belowInner.style.transform="translateX("+(-scrollLeft*PARALLAX_BELOW)+"px)";
   }
 
+  // ── Bounce: kenar çarpışmasında peek de seksin ──
+
+  function peekBounce(overscrollPx){
+    var sc=DOM.scrollContainer.scrollLeft;
+    var aboveInner=DOM.peekAbove.firstChild;
+    var belowInner=DOM.peekBelow.firstChild;
+    var dur=580; // ana bounce 480ms — peek daha yavaş
+    var ease="cubic-bezier(.25,1.05,.5,.98)";
+    if(aboveInner){
+      var base=-sc*PARALLAX_ABOVE;
+      aboveInner.animate([
+        {transform:"translateX("+(base+overscrollPx*PARALLAX_ABOVE)+"px)"},
+        {transform:"translateX("+base+"px)"}
+      ],{duration:dur,easing:ease,fill:"none"});
+    }
+    if(belowInner){
+      var base=-sc*PARALLAX_BELOW;
+      belowInner.animate([
+        {transform:"translateX("+(base+overscrollPx*PARALLAX_BELOW)+"px)"},
+        {transform:"translateX("+base+"px)"}
+      ],{duration:dur,easing:ease,fill:"none"});
+    }
+  }
+
   // ── Morph: peek → gerçek kartlara dönüşüm (fazlı zamanlama) ──
 
   function animateStart(direction){
@@ -756,11 +781,12 @@ var Peek=(function(){
 
   function animateProgress(el,progress,direction){
     var p=Math.min(progress,1);
-    var s=SCALE+p*(1-SCALE);
+    var sx=SCALE+p*(1-SCALE);
+    var sy=SCALE_H+p*(1-SCALE_H);
     var peekTop=parseFloat(el.style.top);
     var targetTop=storedFixedTop+CARD_AREA_OFFSET;
     var dy=(targetTop-peekTop)*p;
-    el.style.transform="translateY("+dy+"px) scale("+s+")";
+    el.style.transform="translateY("+dy+"px) scale("+sx+","+sy+")";
     el.style.transformOrigin="left top";
 
     // Mask: p=0.7'ye kadar tamamen gevşer
@@ -782,13 +808,13 @@ var Peek=(function(){
     el.style.transform="none";
     el.style.zIndex="";
     el.style.transition="opacity .3s";
-    el.style.maskImage="";
-    el.style.webkitMaskImage="";
+    // mask temizlenMEZ — Peek.update() zaten doğru mask'i uyguluyor
+    // burada temizlersek revertView sonrası flash olur
   }
 
-  return {update:update,position:position,hide:hide,syncScroll:syncScroll,
+  return {update:update,position:position,hide:hide,syncScroll:syncScroll,bounce:peekBounce,
           animateStart:animateStart,animateProgress:animateProgress,animateEnd:animateEnd,
-          SCALE:SCALE};
+          SCALE:SCALE,SCALE_H:SCALE_H};
 })();
 
 
@@ -913,27 +939,37 @@ var Navigation=(function(){
 
   var swipeTargetCategory=null;
   var savedLastCategory=null;
+  var savedCategoryScroll=0;
 
   function swapView(direction){
     if(direction==="down"){
       State.view="categories";State.currentCategory=null;
+      updateHeader();
+      UI.renderAll();
+      DOM.scrollContainer.scrollLeft=savedCategoryScroll;
+      Peek.syncScroll(savedCategoryScroll);
     }else{
+      savedCategoryScroll=DOM.scrollContainer.scrollLeft;
       var cat=swipeTargetCategory||State.lastCategory;
       State.view="tasks";State.currentCategory=cat;State.lastCategory=cat;
+      updateHeader();
+      UI.renderAll();
     }
-    updateHeader();
-    UI.renderAll();
   }
 
   function revertView(direction){
     if(direction==="down"){
       State.view="tasks";State.currentCategory=State.lastCategory;
+      updateHeader();
+      UI.renderAll();
     }else{
       State.view="categories";State.currentCategory=null;
       if(savedLastCategory!==undefined)State.lastCategory=savedLastCategory;
+      updateHeader();
+      UI.renderAll();
+      DOM.scrollContainer.scrollLeft=savedCategoryScroll;
+      Peek.syncScroll(savedCategoryScroll);
     }
-    updateHeader();
-    UI.renderAll();
   }
 
   // ── Tap ile crossfade (WAAPI — compositor thread) ──
@@ -961,10 +997,11 @@ var Navigation=(function(){
     if(activePeekEl){
       var peekTop=parseFloat(activePeekEl.style.top);
       var targetY=parseFloat(DOM.contentBlock.style.top)+52-peekTop;
-      var midScale=Peek.SCALE+0.75*(1-Peek.SCALE);
+      var midSx=Peek.SCALE+0.75*(1-Peek.SCALE);
+      var midSy=Peek.SCALE_H+0.75*(1-Peek.SCALE_H);
       var pA=activePeekEl.animate([
-        {offset:0,transform:"translateY(0) scale("+Peek.SCALE+")",opacity:1},
-        {offset:0.75,transform:"translateY("+(targetY*0.75)+"px) scale("+midScale+")",opacity:1},
+        {offset:0,transform:"translateY(0) scale("+Peek.SCALE+","+Peek.SCALE_H+")",opacity:1},
+        {offset:0.75,transform:"translateY("+(targetY*0.75)+"px) scale("+midSx+","+midSy+")",opacity:1},
         {offset:1,transform:"translateY("+targetY+"px) scale(1)",opacity:0}
       ],{duration:250,easing:EASE,fill:"forwards"});
       currentAnim.push(pA);
@@ -1080,6 +1117,7 @@ var Navigation=(function(){
   return {
     goToTasks:function(cat){
       crossfade("up",function(){
+        savedCategoryScroll=DOM.scrollContainer.scrollLeft;
         State.view="tasks";
         State.currentCategory=cat;
         State.lastCategory=cat;
@@ -1093,6 +1131,8 @@ var Navigation=(function(){
         State.currentCategory=null;
         updateHeader();
         UI.renderAll();
+        DOM.scrollContainer.scrollLeft=savedCategoryScroll;
+        Peek.syncScroll(savedCategoryScroll);
       });
     },
     startSwipe:startSwipe,
@@ -1213,6 +1253,7 @@ var Gestures=(function(){
       {transform:"translateX(0)"}
     ],{duration:480,easing:"cubic-bezier(.25,1.05,.5,.98)"});
     bounceAnim.onfinish=function(){bounceAnim=null;};
+    Peek.bounce(overscrollPx);
   }
 
   function cancelMomentum(){
@@ -1386,7 +1427,7 @@ var Gestures=(function(){
           var relX=t.clientX+scrollEl.scrollLeft-20;
           var catIdx=Math.max(0,Math.min(Math.floor(relX/Config.SLOT),State.categories.length-1));
           var cat=State.categories[catIdx];
-          if(cat&&cat.todos.length>0){canSwipe=true;swipeCat=cat;}
+          if(cat){canSwipe=true;swipeCat=cat;}
         }
         if(canSwipe){g.swiping=true;g.direction=dir;Navigation.startSwipe(dir,swipeCat);}
       }
