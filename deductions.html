@@ -1018,21 +1018,22 @@ var Gestures=(function(){
       var dt=now-lastT;lastT=now;
       vel*=Math.pow(Config.MOMENTUM_FRICTION,dt/16.67);
 
-      // Edge damping: increase friction near scroll boundaries for gentle approach
+      // Edge damping: gentle friction near scroll boundaries
       var maxSc=sc.scrollWidth-sc.clientWidth;
       var edgeDist=Math.min(sc.scrollLeft,maxSc-sc.scrollLeft);
-      if(edgeDist<120){
-        var edgeFactor=Math.max(0,edgeDist/120);
-        vel*=0.6+0.4*edgeFactor; // ramp friction: 60% retention at edge → 100% at 120px away
+      if(edgeDist<80){
+        var edgeFactor=Math.max(0,edgeDist/80);
+        vel*=0.78+0.22*edgeFactor; // 78% retention at edge → 100% at 80px away
       }
 
       if(Math.abs(vel)<Config.MOMENTUM_MIN){momentumRAF=null;return;}
       sc.scrollLeft-=vel;
       if((sc.scrollLeft<=0&&vel>0)||(sc.scrollLeft>=maxSc&&vel<0)){
         momentumRAF=null;
-        var over=vel*4;
-        over=Math.sign(over)*Math.min(Math.abs(over),32);
-        if(Math.abs(over)>2)bounce(over);
+        var over=vel*6;
+        over=Math.sign(over)*Math.min(Math.abs(over),42);
+        if(Math.abs(over)<8)over=Math.sign(over||1)*8; // minimum bounce for feel
+        bounce(over);
         return;
       }
       momentumRAF=requestAnimationFrame(step);
