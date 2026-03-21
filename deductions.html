@@ -1000,7 +1000,7 @@ var Gestures=(function(){
     bounceAnim=DOM.track.animate([
       {transform:"translateX("+overscrollPx+"px)"},
       {transform:"translateX(0)"}
-    ],{duration:420,easing:"cubic-bezier(.25,.46,.45,.94)"});
+    ],{duration:480,easing:"cubic-bezier(.25,1.05,.5,.98)"});
     bounceAnim.onfinish=function(){bounceAnim=null;};
   }
 
@@ -1030,8 +1030,8 @@ var Gestures=(function(){
       sc.scrollLeft-=vel;
       if((sc.scrollLeft<=0&&vel>0)||(sc.scrollLeft>=maxSc&&vel<0)){
         momentumRAF=null;
-        var over=vel*3;
-        over=Math.sign(over)*Math.min(Math.abs(over),28);
+        var over=vel*4;
+        over=Math.sign(over)*Math.min(Math.abs(over),32);
         if(Math.abs(over)>2)bounce(over);
         return;
       }
