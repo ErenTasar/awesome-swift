@@ -49,20 +49,21 @@ var initialHeight=window.innerHeight;
 var CONTENT_HEIGHT=190; // başlık(~50) + kartlar(~124) + padding(~16)
 appContainer.style.height=initialHeight+"px";
 
-var idleTop=Math.max(40,Math.round((initialHeight-CONTENT_HEIGHT)/2));
-contentBlock.style.top=idleTop+"px";
-contentBlock.style.transition="top .32s cubic-bezier(.25,1,.5,1)";
+// Sabit pozisyon: ekranın %38'i civarında — klavye açık/kapalı fark etmez
+var fixedTop=Math.max(40,Math.round(initialHeight*0.38-CONTENT_HEIGHT/2));
+contentBlock.style.top=fixedTop+"px";
 
 function positionContent(){
+// Klavye açıkken kartlar görünür alanın dışına taşıyorsa yukarı çek
 var visibleH=window.visualViewport?window.visualViewport.height:initialHeight;
-var kbOpen=initialHeight-visibleH>100;
-if(kbOpen){
-// Klavye açık: kartların alt kenarı klavyenin 24px üstünde olacak şekilde
-var bottom=visibleH-24;
-var top=Math.max(20,bottom-CONTENT_HEIGHT);
+var contentBottom=fixedTop+CONTENT_HEIGHT;
+if(contentBottom>visibleH-24){
+var top=Math.max(20,visibleH-24-CONTENT_HEIGHT);
+contentBlock.style.transition="top .28s cubic-bezier(.25,1,.5,1)";
 contentBlock.style.top=top+"px";
 }else{
-contentBlock.style.top=idleTop+"px";
+contentBlock.style.transition="top .28s cubic-bezier(.25,1,.5,1)";
+contentBlock.style.top=fixedTop+"px";
 }
 }
 
@@ -383,26 +384,37 @@ function cancelAdding(){
 adding=false;addingLock=false;newCol=null;
 const nc=track.querySelector(".new-card");
 if(!nc){updateSubtitle();if(todos.length===0)showEmptyState();return;}
-// Animate out: fade + shrink then collapse
+// Animate out like startRemoveAnimation: fade+scale on inner card, then collapse wrapper
+var card=nc; // nc is the wrapper which is also the visible card
 requestAnimationFrame(function(){
-Object.assign(nc.style,{
+Object.assign(card.style,{
 opacity:"0",
-transform:"scale(.82) translateY(-8px)",
-transition:"opacity .26s ease, transform .26s cubic-bezier(.4,0,.2,1)",
+transform:"scale(.8) translateY(-6px)",
+transition:"opacity .28s ease, transform .28s cubic-bezier(.4,0,.2,1)",
 });
 });
+// Stage 2: wrap in a collapsible container and shrink width
 setTimeout(function(){
-nc.style.transition="width .28s cubic-bezier(.4,0,.2,1), margin .28s cubic-bezier(.4,0,.2,1)";
-nc.style.width="0px";nc.style.marginRight="0px";nc.style.overflow="hidden";
-nc.addEventListener("transitionend",function handler(e){
+// Create a collapsible wrapper around nc
+var collapser=document.createElement("div");
+Object.assign(collapser.style,{
+width:(W+GAP)+"px",height:H+"px",overflow:"hidden",flexShrink:"0",
+transition:"width .32s cubic-bezier(.4,0,.2,1)",
+});
+nc.parentNode.insertBefore(collapser,nc);
+collapser.appendChild(nc);
+// Force reflow
+collapser.offsetWidth;
+collapser.style.width="0px";
+collapser.addEventListener("transitionend",function handler(e){
 if(e.propertyName==="width"){
-nc.removeEventListener("transitionend",handler);
-nc.remove();
+collapser.removeEventListener("transitionend",handler);
+collapser.remove();
 updateSubtitle();
 if(todos.length===0&&!adding)showEmptyState();
 }
 });
-},260);
+},280);
 }
 
 function doAdd(){
