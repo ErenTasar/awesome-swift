@@ -675,8 +675,8 @@ var UI=(function(){
    ═══════════════════════════════════════════ */
 var Peek=(function(){
   var SCALE=0.55;
-  var BLUR=6;
-  var OPACITY=0.2;
+  var BLUR=4;
+  var OPACITY=0.5;
 
   function miniCards(list){
     var d=document.createElement("div");
@@ -693,7 +693,7 @@ var Peek=(function(){
 
   function applyMask(el,direction){
     el.style.filter="blur("+BLUR+"px)";
-    var grad="linear-gradient(to "+direction+", rgba(0,0,0,.6), transparent)";
+    var grad="linear-gradient(to "+direction+", rgba(0,0,0,1) 20%, transparent)";
     el.style.maskImage=grad;
     el.style.webkitMaskImage=grad;
   }
