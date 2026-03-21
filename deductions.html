@@ -675,8 +675,6 @@ var UI=(function(){
    ═══════════════════════════════════════════ */
 var Peek=(function(){
   var SCALE=0.6;
-  var BLUR=3;
-  var OPACITY=0.75;
 
   function miniCards(list){
     var d=document.createElement("div");
@@ -685,15 +683,16 @@ var Peek=(function(){
       var c=document.createElement("div");
       c.style.cssText="width:"+(Config.W*SCALE)+"px;height:"+(Config.H*SCALE)
         +"px;border-radius:"+(Config.R*SCALE)+"px;background:"+item.color.bg
-        +";flex-shrink:0;opacity:"+OPACITY;
+        +";flex-shrink:0";
       d.appendChild(c);
     });
     return d;
   }
 
   function applyMask(el,direction){
-    el.style.filter="blur("+BLUR+"px)";
-    var grad="linear-gradient(to "+direction+", rgba(0,0,0,1) 40%, transparent 95%)";
+    el.style.filter="none";
+    el.style.opacity="0.45";
+    var grad="linear-gradient(to "+direction+", rgba(0,0,0,1) 30%, transparent 85%)";
     el.style.maskImage=grad;
     el.style.webkitMaskImage=grad;
   }
@@ -705,7 +704,6 @@ var Peek=(function(){
     if(State.view==="categories"&&State.lastCategory&&State.lastCategory.todos.length>0){
       DOM.peekBelow.appendChild(miniCards(State.lastCategory.todos));
       applyMask(DOM.peekBelow,"bottom");
-      DOM.peekBelow.style.opacity="1";
     }else{
       DOM.peekBelow.style.opacity="0";
     }
@@ -713,7 +711,6 @@ var Peek=(function(){
     if(State.view==="tasks"&&State.categories.length>0){
       DOM.peekAbove.appendChild(miniCards(State.categories));
       applyMask(DOM.peekAbove,"top");
-      DOM.peekAbove.style.opacity="1";
     }else{
       DOM.peekAbove.style.opacity="0";
     }
