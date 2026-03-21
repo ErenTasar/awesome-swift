@@ -857,6 +857,7 @@ var Navigation=(function(){
 var Gestures=(function(){
   var g={active:false};
   var momentumRAF=null;
+  var bounceAnim=null;
 
   // ── Pull-to-add helpers (değişmedi) ──
   function dampedPull(rawDx){
@@ -913,6 +914,20 @@ var Gestures=(function(){
   }
 
   // ── Momentum: rAF tabanlı, frame-rate bağımsız ──
+  function cancelBounce(){
+    if(bounceAnim){try{bounceAnim.cancel();}catch(e){}bounceAnim=null;}
+    DOM.track.style.transform="";
+  }
+
+  function bounce(overscrollPx){
+    cancelBounce();
+    bounceAnim=DOM.track.animate([
+      {transform:"translateX("+overscrollPx+"px)"},
+      {transform:"translateX(0)"}
+    ],{duration:350,easing:"cubic-bezier(.25,1,.5,1)"});
+    bounceAnim.onfinish=function(){bounceAnim=null;};
+  }
+
   function cancelMomentum(){
     if(momentumRAF){cancelAnimationFrame(momentumRAF);momentumRAF=null;}
   }
@@ -926,7 +941,17 @@ var Gestures=(function(){
       vel*=Math.pow(Config.MOMENTUM_FRICTION,dt/16.67);
       if(Math.abs(vel)<Config.MOMENTUM_MIN){momentumRAF=null;return;}
       sc.scrollLeft-=vel;
-      if(sc.scrollLeft<=0||sc.scrollLeft>=sc.scrollWidth-sc.clientWidth){momentumRAF=null;return;}
+      var atLeft=sc.scrollLeft<=0;
+      var atRight=sc.scrollLeft>=sc.scrollWidth-sc.clientWidth;
+      if(atLeft||atRight){
+        momentumRAF=null;
+        var over=vel*6;
+        over=Math.sign(over)*Math.min(Math.abs(over),35);
+        if(atRight)over=-Math.abs(over);
+        else over=Math.abs(over);
+        if(Math.abs(over)>2)bounce(over);
+        return;
+      }
       momentumRAF=requestAnimationFrame(step);
     }
     momentumRAF=requestAnimationFrame(step);
@@ -961,7 +986,7 @@ var Gestures=(function(){
     // ── TOUCH: hepsi appContainer üzerinde ──
     ac.addEventListener("touchstart",function(e){
       if(isInteractive(e.target))return;
-      cancelMomentum();
+      cancelMomentum();cancelBounce();
       var t=e.touches[0];
       g={active:true,pulling:false,startX:t.clientX,startY:t.clientY,lastX:t.clientX,
          axis:null,dy:0,swiping:false,direction:null,pullVal:0,scrollStart:sc.scrollLeft};
@@ -993,7 +1018,17 @@ var Gestures=(function(){
         if(g.pulling){
           applyPull(dx);
         }else{
+          var before=sc.scrollLeft;
           sc.scrollLeft-=frameDx;
+          var clamped=sc.scrollLeft===before&&frameDx!==0;
+          if(clamped){
+            g.overscroll=(g.overscroll||0)+frameDx*0.35;
+            g.overscroll=Math.sign(g.overscroll)*Math.min(Math.abs(g.overscroll),40);
+            DOM.track.style.transform="translateX("+g.overscroll+"px)";
+          }else if(g.overscroll){
+            g.overscroll=0;
+            DOM.track.style.transform="";
+          }
         }
         return;
       }
@@ -1029,6 +1064,7 @@ var Gestures=(function(){
         }else{
           var v=vel.get();
           if(Math.abs(v)>Config.MOMENTUM_MIN)startMomentum(v);
+          else if(g.overscroll&&Math.abs(g.overscroll)>1)bounce(g.overscroll);
         }
       }
 
@@ -1050,7 +1086,7 @@ var Gestures=(function(){
     // ── MOUSE: appContainer üzerinde ──
     ac.addEventListener("mousedown",function(e){
       if(isInteractive(e.target))return;
-      cancelMomentum();
+      cancelMomentum();cancelBounce();
       g={active:true,pulling:false,startX:e.clientX,startY:e.clientY,lastX:e.clientX,
          axis:null,mouse:true,pullVal:0,scrollStart:sc.scrollLeft};
       e.preventDefault();
@@ -1074,7 +1110,19 @@ var Gestures=(function(){
       if(!g.pulling&&g.scrollStart<2&&sc.scrollLeft<2&&dx>4)g.pulling=true;
 
       if(g.pulling){applyPull(dx);}
-      else{sc.scrollLeft-=frameDx;}
+      else{
+        var before=sc.scrollLeft;
+        sc.scrollLeft-=frameDx;
+        var clamped=sc.scrollLeft===before&&frameDx!==0;
+        if(clamped){
+          g.overscroll=(g.overscroll||0)+frameDx*0.35;
+          g.overscroll=Math.sign(g.overscroll)*Math.min(Math.abs(g.overscroll),40);
+          DOM.track.style.transform="translateX("+g.overscroll+"px)";
+        }else if(g.overscroll){
+          g.overscroll=0;
+          DOM.track.style.transform="";
+        }
+      }
     });
 
     window.addEventListener("mouseup",function(){
@@ -1083,6 +1131,8 @@ var Gestures=(function(){
         commitPull(g.pullVal||0);
       }else if(g.pulling){
         resetVisuals();
+      }else if(g.overscroll&&Math.abs(g.overscroll)>1){
+        bounce(g.overscroll);
       }
       g={active:false};
     });
