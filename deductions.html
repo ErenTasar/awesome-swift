@@ -87,8 +87,7 @@ var State={
   ],
   nextId:6,
   adding:false,
-  addingLock:false,
-  newCol:null
+  addingLock:false
 };
 
 
@@ -220,6 +219,7 @@ var CardFactory=(function(){
 
   function contentContainer(justify){
     var div=document.createElement("div");
+    div.className="card-content";
     Object.assign(div.style,{
       position:"relative",zIndex:"1",padding:"12px 14px",height:"100%",
       display:"flex",flexDirection:"column",justifyContent:justify||"space-between"
@@ -235,7 +235,7 @@ var CardFactory=(function(){
     var card=document.createElement("div");
     Object.assign(card.style,{
       width:Config.W+"px",height:Config.H+"px",borderRadius:Config.R+"px",marginRight:Config.GAP+"px",
-      background:todo.color.bg,position:"relative",overflow:"hidden",opacity:"1",transform:"scale(1)",
+      background:todo.color.bg,position:"relative",overflow:"hidden",
     });
     card.appendChild(scratches(todo.color.accent));
 
@@ -334,7 +334,7 @@ var CardFactory=(function(){
   function promote(nc,todo){
     nc.className="";
     var card=nc.firstElementChild;
-    var content=card.querySelector("div[style*='z-index']");
+    var content=card.querySelector(".card-content");
     if(!content)return;
 
     // Input'u kaldır
@@ -357,66 +357,66 @@ var CardFactory=(function(){
     }));
   }
 
-  return {existing:existing, blank:blank, promote:promote};
+  return {existing:existing, blank:blank, promote:promote, textLabel:textLabel};
 })();
 
 
 /* ═══════════════════════════════════════════
    ANIMATIONS — kart animasyonları
    ═══════════════════════════════════════════ */
-var Animations={
+var Animations=(function(){
 
-  // Kart silme: fade-out → width collapse → DOM kaldır
-  remove:function(wrapper,card,id){
-    card.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
+  // Ortak fade-out: double-rAF ile opacity+scale animasyonu, bitince onDone çağır
+  function fadeOut(el,onDone){
+    el.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
     requestAnimationFrame(function(){
       requestAnimationFrame(function(){
-        card.style.opacity="0";
-        card.style.transform="scale(.85) translateY(-6px)";
+        el.style.opacity="0";
+        el.style.transform="scale(.85) translateY(-6px)";
       });
     });
-    setTimeout(function(){
-      wrapper.style.borderRadius=Config.R+"px";
-      wrapper.style.transition="width .32s cubic-bezier(.4,0,.2,1)";
-      wrapper.style.width="0px";
-      wrapper.addEventListener("transitionend",function handler(e){
-        if(e.propertyName==="width"){
-          wrapper.removeEventListener("transitionend",handler);
+    if(onDone)setTimeout(onDone,300);
+  }
+
+  // Ortak width collapse: width→0, transitionend'de onDone çağır
+  function collapseWidth(el,onDone){
+    el.style.transition="width .32s cubic-bezier(.4,0,.2,1)";
+    el.style.width="0px";
+    el.addEventListener("transitionend",function handler(e){
+      if(e.propertyName==="width"){
+        el.removeEventListener("transitionend",handler);
+        onDone();
+      }
+    });
+  }
+
+  return {
+    // Kart silme: fade-out → width collapse → DOM kaldır
+    remove:function(wrapper,card,id){
+      fadeOut(card,function(){
+        wrapper.style.borderRadius=Config.R+"px";
+        collapseWidth(wrapper,function(){
           State.todos=State.todos.filter(function(t){return t.id!==id;});
           wrapper.remove();
           UI.updateSubtitle();
           if(State.todos.length===0&&!State.adding)UI.showEmptyState();
-        }
-      });
-    },300);
-  },
-
-  // Yeni kart iptali: fade-out → width collapse → DOM kaldır
-  collapse:function(nc){
-    var card=nc.firstElementChild;
-    if(card){
-      card.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
-      requestAnimationFrame(function(){
-        requestAnimationFrame(function(){
-          card.style.opacity="0";
-          card.style.transform="scale(.85) translateY(-6px)";
         });
       });
-    }
-    setTimeout(function(){
-      nc.style.transition="width .32s cubic-bezier(.4,0,.2,1)";
-      nc.style.width="0px";
-      nc.addEventListener("transitionend",function handler(e){
-        if(e.propertyName==="width"){
-          nc.removeEventListener("transitionend",handler);
+    },
+
+    // Yeni kart iptali: fade-out → width collapse → DOM kaldır
+    collapse:function(nc){
+      var card=nc.firstElementChild;
+      fadeOut(card,function(){
+        collapseWidth(nc,function(){
           nc.remove();
           UI.updateSubtitle();
           if(State.todos.length===0&&!State.adding)UI.showEmptyState();
-        }
+        });
       });
-    },300);
-  }
-};
+    }
+  };
+})();
 
 
 /* ═══════════════════════════════════════════
@@ -438,16 +438,8 @@ var Editing={
       if(committed)return;committed=true;
       var v=(input.value||"").trim();
       if(v&&v!==todo.text)todo.text=v;
-      var label=document.createElement("div");
-      Object.assign(label.style,{
-        fontWeight:"600",fontSize:"15.5px",color:"#fff",lineHeight:"1.22",letterSpacing:"-.01em",
-        display:"-webkit-box",WebkitLineClamp:"2",WebkitBoxOrient:"vertical",
-        overflow:"hidden",textOverflow:"ellipsis",wordBreak:"break-all",cursor:"text",
-      });
-      label.textContent=todo.text;
-      label.addEventListener("click",function(e){
-        e.stopPropagation();
-        Editing.start(content,label,todo);
+      var label=CardFactory.textLabel(todo.text,function(div){
+        Editing.start(content,div,todo);
       });
       content.replaceChild(label,input);
     }
@@ -469,52 +461,56 @@ var Editing={
 /* ═══════════════════════════════════════════
    UI — boş durum, subtitle, render
    ═══════════════════════════════════════════ */
-var UI={
-  showEmptyState:function(){
-    var existing=DOM.track.querySelector(".empty-state");
-    if(existing)existing.remove();
+var UI=(function(){
 
-    var empty=document.createElement("div");
-    empty.className="empty-state";
-    Object.assign(empty.style,{
-      width:Config.W+"px",height:Config.H+"px",borderRadius:Config.R+"px",flexShrink:"0",
-      border:"2px dashed rgba(255,255,255,.08)",display:"flex",alignItems:"center",
-      justifyContent:"center",flexDirection:"column",gap:"6px",
-    });
-    empty.innerHTML='<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg><span style="font-size:12px;color:rgba(255,255,255,.15);font-weight:600">Harika!</span>';
-
-    var spacer=document.createElement("div");
-    Object.assign(spacer.style,{width:"20px",flexShrink:"0"});
-    DOM.track.appendChild(empty);
-    DOM.track.appendChild(spacer);
-  },
-
-  removeEmptyState:function(){
-    var el=DOM.track.querySelector(".empty-state");
-    if(el)el.remove();
-  },
-
-  updateSubtitle:function(){
-    DOM.subtitle.textContent=(State.todos.length===0&&!State.adding)
-      ?"Hepsini tamamladın!"
-      :"← sola çek veya + ile ekle";
-  },
-
-  renderAll:function(){
-    DOM.track.innerHTML="";
-    if(State.todos.length===0&&!State.adding){
-      UI.showEmptyState();
-    }else{
-      State.todos.forEach(function(todo){
-        DOM.track.appendChild(CardFactory.existing(todo));
-      });
-      var spacer=document.createElement("div");
-      Object.assign(spacer.style,{width:"20px",flexShrink:"0"});
-      DOM.track.appendChild(spacer);
-    }
-    UI.updateSubtitle();
+  function spacer(){
+    var s=document.createElement("div");
+    Object.assign(s.style,{width:"20px",flexShrink:"0"});
+    return s;
   }
-};
+
+  return {
+    showEmptyState:function(){
+      var existing=DOM.track.querySelector(".empty-state");
+      if(existing)existing.remove();
+
+      var empty=document.createElement("div");
+      empty.className="empty-state";
+      Object.assign(empty.style,{
+        width:Config.W+"px",height:Config.H+"px",borderRadius:Config.R+"px",flexShrink:"0",
+        border:"2px dashed rgba(255,255,255,.08)",display:"flex",alignItems:"center",
+        justifyContent:"center",flexDirection:"column",gap:"6px",
+      });
+      empty.innerHTML='<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg><span style="font-size:12px;color:rgba(255,255,255,.15);font-weight:600">Harika!</span>';
+      DOM.track.appendChild(empty);
+      DOM.track.appendChild(spacer());
+    },
+
+    removeEmptyState:function(){
+      var el=DOM.track.querySelector(".empty-state");
+      if(el)el.remove();
+    },
+
+    updateSubtitle:function(){
+      DOM.subtitle.textContent=(State.todos.length===0&&!State.adding)
+        ?"Hepsini tamamladın!"
+        :"← sola çek veya + ile ekle";
+    },
+
+    renderAll:function(){
+      DOM.track.innerHTML="";
+      if(State.todos.length===0&&!State.adding){
+        UI.showEmptyState();
+      }else{
+        State.todos.forEach(function(todo){
+          DOM.track.appendChild(CardFactory.existing(todo));
+        });
+        DOM.track.appendChild(spacer());
+      }
+      UI.updateSubtitle();
+    }
+  };
+})();
 
 
 /* ═══════════════════════════════════════════
@@ -526,11 +522,11 @@ var TodoManager={
     DOM.proxyInput.focus({preventScroll:true});
     State.addingLock=true;
     State.adding=true;
-    State.newCol=Config.pickColor(State.todos.map(function(t){return t.color.bg;}));
+    var color=Config.pickColor(State.todos.map(function(t){return t.color.bg;}));
 
     UI.removeEmptyState();
 
-    var el=CardFactory.blank(State.newCol,pullWidth);
+    var el=CardFactory.blank(color,pullWidth);
     DOM.track.insertBefore(el,DOM.track.firstChild);
     UI.updateSubtitle();
   },
@@ -538,7 +534,7 @@ var TodoManager={
   confirm:function(text,color){
     var todo={id:State.nextId++,text:text,color:color};
     State.todos.unshift(todo);
-    State.adding=false;State.addingLock=false;State.newCol=null;
+    State.adding=false;State.addingLock=false;
 
     var nc=DOM.queryNewCard();
     if(nc)CardFactory.promote(nc,todo);
@@ -548,7 +544,7 @@ var TodoManager={
   },
 
   cancel:function(){
-    State.adding=false;State.addingLock=false;State.newCol=null;
+    State.adding=false;State.addingLock=false;
     var nc=DOM.queryNewCard();
     if(!nc){UI.updateSubtitle();if(State.todos.length===0)UI.showEmptyState();return;}
     Animations.collapse(nc);
@@ -592,10 +588,7 @@ var Gestures=(function(){
 
   function commitPull(pullVal){
     TodoManager.add(pullVal);
-    DOM.track.style.transition="transform .3s cubic-bezier(.25,1,.5,1)";
-    DOM.track.style.transform="";
-    DOM.pullIndicator.style.opacity="0";
-    DOM.pullIndicator.style.transform="translateX(-56px) scale(.3)";
+    resetVisuals();
   }
 
   function applyPull(dx){
