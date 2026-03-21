@@ -314,15 +314,24 @@ subtitle.textContent="← sola çek veya + ile ekle";
 }
 
 function createNewCardEl(color){
-const wrapper=document.createElement("div");
-Object.assign(wrapper.style,{
+// Dış collapser — width animasyonu için
+const collapser=document.createElement("div");
+Object.assign(collapser.style,{
+width:"0px",overflow:"hidden",flexShrink:"0",
+transition:"width .3s cubic-bezier(.34,1.2,.64,1)",
+});
+collapser.className="new-card";
+
+// İç kart (görsel)
+const card=document.createElement("div");
+Object.assign(card.style,{
 width:W+"px",height:H+"px",borderRadius:R+"px",marginRight:GAP+"px",
 background:color.bg,position:"relative",overflow:"hidden",flexShrink:"0",
-animation:"popIn .26s cubic-bezier(.34,1.56,.64,1) both",
+opacity:"0",transform:"scale(.7)",
+transition:"opacity .25s ease .08s, transform .25s cubic-bezier(.34,1.56,.64,1) .08s",
 });
-wrapper.className="new-card";
 
-wrapper.appendChild(createScratchesSVG(color.accent));
+card.appendChild(createScratchesSVG(color.accent));
 
 const content=document.createElement("div");
 Object.assign(content.style,{position:"relative",zIndex:"1",padding:"12px 14px",height:"100%",display:"flex",flexDirection:"column",justifyContent:"flex-end"});
@@ -336,7 +345,7 @@ fontWeight:"600",fontSize:"16px",color:"#fff",lineHeight:"1.22",letterSpacing:"-
 background:"transparent",border:"none",outline:"none",padding:"0",margin:"0",width:"100%",
 caretColor:"transparent",fontFamily:"inherit",
 });
-setTimeout(function(){input.style.caretColor="#fff";},280);
+setTimeout(function(){input.style.caretColor="#fff";},320);
 
 let submitted=false;
 function submit(){
@@ -356,7 +365,17 @@ if(e.key==="Escape"){submitted=true;cancelAdding();}
 input.addEventListener("blur",function(){setTimeout(submit,250);});
 
 content.appendChild(input);
-wrapper.appendChild(content);
+card.appendChild(content);
+collapser.appendChild(card);
+
+// Animate in: width expand + fade+scale
+requestAnimationFrame(function(){
+requestAnimationFrame(function(){
+collapser.style.width=(W+GAP)+"px";
+card.style.opacity="1";
+card.style.transform="scale(1)";
+});
+});
 
 // Focus transfer: proxy zaten klavyeyi açtı, şimdi gerçek input'a geç
 requestAnimationFrame(function(){
@@ -364,7 +383,7 @@ input.focus({preventScroll:true});
 window.scrollTo(0,0);
 });
 
-return wrapper;
+return collapser;
 }
 
 function addTodo(text,color){
@@ -372,73 +391,80 @@ const todo={id:nextId++,text:text,color:color};
 todos.unshift(todo);
 adding=false;addingLock=false;newCol=null;
 
-// Remove new card instantly (will be replaced by animated real card)
+// Yerinde dönüşüm: new-card'ı normal karta çevir (yeniden spawn yok)
 const nc=track.querySelector(".new-card");
-if(nc)nc.remove();
+if(nc){
+nc.className=""; // new-card class'ını kaldır
+const card=nc.firstElementChild; // iç kart div
+const content=card.querySelector("div[style*='z-index']");
+if(content){
+// Input'u kaldır
+const input=content.querySelector("input");
+if(input)content.removeChild(input);
 
-removeEmptyState();
+// justifyContent'i space-between yap (üst: check, alt: text)
+content.style.justifyContent="space-between";
 
-// Create the real card and animate it in
-const cardWrapper=createCardEl(todo);
-const innerCard=cardWrapper.firstElementChild;
+// Check button row ekle (üste)
+const btnRow=document.createElement("div");
+Object.assign(btnRow.style,{display:"flex",justifyContent:"flex-end"});
+const checkBtn=document.createElement("button");
+Object.assign(checkBtn.style,{
+width:"26px",height:"26px",borderRadius:"50%",border:"2px solid rgba(255,255,255,.28)",
+background:"rgba(255,255,255,.08)",display:"flex",alignItems:"center",justifyContent:"center",
+cursor:"pointer",padding:"0",transition:"background .15s,border-color .15s",
+});
+checkBtn.innerHTML='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+checkBtn.addEventListener("click",function(e){
+e.stopPropagation();
+startRemoveAnimation(nc,card,todo.id);
+});
+btnRow.appendChild(checkBtn);
+content.insertBefore(btnRow,content.firstChild);
 
-// Start collapsed + invisible
-cardWrapper.style.width="0px";
-cardWrapper.style.transition="width .3s cubic-bezier(.34,1.2,.64,1)";
-innerCard.style.opacity="0";
-innerCard.style.transform="scale(.7)";
-innerCard.style.transition="opacity .25s ease .08s, transform .25s cubic-bezier(.34,1.56,.64,1) .08s";
-
-// Insert at beginning of track
-track.insertBefore(cardWrapper,track.firstChild);
-
-// Ensure spacer exists at end
-var lastChild=track.lastElementChild;
-if(!lastChild||lastChild.style.width!=="20px"){
-var spacer=document.createElement("div");
-Object.assign(spacer.style,{width:"20px",flexShrink:"0"});
-track.appendChild(spacer);
+// Text div ekle (alta)
+const textDiv=document.createElement("div");
+Object.assign(textDiv.style,{
+fontWeight:"600",fontSize:"15.5px",color:"#fff",lineHeight:"1.22",letterSpacing:"-.01em",
+display:"-webkit-box",WebkitLineClamp:"2",WebkitBoxOrient:"vertical",
+overflow:"hidden",textOverflow:"ellipsis",wordBreak:"break-all",cursor:"text",
+});
+textDiv.textContent=text;
+textDiv.addEventListener("click",function(e){
+e.stopPropagation();
+startEditing(content,textDiv,todo);
+});
+content.appendChild(textDiv);
+}
 }
 
-// Animate in
-requestAnimationFrame(function(){
-requestAnimationFrame(function(){
-cardWrapper.style.width=SLOT+"px";
-innerCard.style.opacity="1";
-innerCard.style.transform="scale(1)";
-});
-});
-
+removeEmptyState();
 updateSubtitle();
 }
 
 function cancelAdding(){
 adding=false;addingLock=false;newCol=null;
-const nc=track.querySelector(".new-card");
+const nc=track.querySelector(".new-card"); // collapser div
 if(!nc){updateSubtitle();if(todos.length===0)showEmptyState();return;}
-// Animate out: fade+scale then collapse with rounded corners
-nc.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
+const card=nc.firstElementChild; // iç kart
+// Stage 1: fade+scale iç kart
+if(card){
+card.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
 requestAnimationFrame(function(){
 requestAnimationFrame(function(){
-nc.style.opacity="0";
-nc.style.transform="scale(.85) translateY(-6px)";
+card.style.opacity="0";
+card.style.transform="scale(.85) translateY(-6px)";
 });
 });
+}
+// Stage 2: collapse collapser width
 setTimeout(function(){
-var collapser=document.createElement("div");
-Object.assign(collapser.style,{
-width:(W+GAP)+"px",height:H+"px",overflow:"hidden",flexShrink:"0",
-borderRadius:R+"px",
-transition:"width .32s cubic-bezier(.4,0,.2,1)",
-});
-nc.parentNode.insertBefore(collapser,nc);
-collapser.appendChild(nc);
-collapser.offsetWidth;
-collapser.style.width="0px";
-collapser.addEventListener("transitionend",function handler(e){
+nc.style.transition="width .32s cubic-bezier(.4,0,.2,1)";
+nc.style.width="0px";
+nc.addEventListener("transitionend",function handler(e){
 if(e.propertyName==="width"){
-collapser.removeEventListener("transitionend",handler);
-collapser.remove();
+nc.removeEventListener("transitionend",handler);
+nc.remove();
 updateSubtitle();
 if(todos.length===0&&!adding)showEmptyState();
 }
