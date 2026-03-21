@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Görevler</title>
+<title>Kategoriler</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;scrollbar-width:none}
 *::-webkit-scrollbar{display:none}
@@ -18,7 +18,7 @@ input::placeholder{color:rgba(255,255,255,.3)}
     <div id="contentBlock" style="position:absolute;left:0;right:0;top:130px">
       <div style="padding:0 20px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
         <div>
-          <h1 style="font-size:26px;font-weight:700;color:#fff;margin:0;letter-spacing:-.025em">Görevler</h1>
+          <h1 id="viewTitle" style="font-size:26px;font-weight:700;color:#fff;margin:0;letter-spacing:-.025em">Kategoriler</h1>
           <p id="subtitle" style="font-size:13.5px;color:rgba(255,255,255,.35);margin:3px 0 0;font-weight:500">← sola çek veya + ile ekle</p>
         </div>
         <button id="addBtn" style="width:36px;height:36px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0">
@@ -78,16 +78,25 @@ var Config={
    STATE — uygulama durumu
    ═══════════════════════════════════════════ */
 var State={
-  todos:[
-    {id:1,text:"Vergi beyannamesi hazırla",color:Config.COLORS[0]},
-    {id:2,text:"Danıştay kararlarını incele",color:Config.COLORS[1]},
-    {id:3,text:"Blog yazısı taslağı",color:Config.COLORS[2]},
-    {id:4,text:"Müvekkil toplantı notu",color:Config.COLORS[3]},
-    {id:5,text:"Qdrant index güncelle",color:Config.COLORS[4]},
+  view:"categories",
+  currentCategory:null,
+  lastCategory:null,
+  categories:[
+    {id:1,text:"İş",color:Config.COLORS[0],todos:[],nextTodoId:1},
+    {id:2,text:"Kişisel",color:Config.COLORS[1],todos:[],nextTodoId:1},
   ],
-  nextId:6,
+  nextCategoryId:3,
   adding:false,
-  addingLock:false
+  addingLock:false,
+
+  activeList:function(){
+    return this.view==="categories"?this.categories
+      :(this.currentCategory?this.currentCategory.todos:[]);
+  },
+  activeNextId:function(){
+    if(this.view==="categories")return this.nextCategoryId++;
+    return this.currentCategory.nextTodoId++;
+  }
 };
 
 
@@ -102,6 +111,7 @@ var DOM={
   addBtn:        document.getElementById("addBtn"),
   scrollContainer:document.getElementById("scrollContainer"),
   pullIndicator: document.getElementById("pullIndicator"),
+  viewTitle:     document.getElementById("viewTitle"),
   proxyInput:    null, // Layout.init içinde oluşturulacak
 
   queryNewCard:function(){return this.track.querySelector(".new-card");}
@@ -227,33 +237,42 @@ var CardFactory=(function(){
     return div;
   }
 
-  // Mevcut task kartı
-  function existing(todo){
+  // Mevcut kart (task veya kategori)
+  function existing(item,opts){
+    opts=opts||{};
     var wrapper=document.createElement("div");
+    wrapper.className="card-wrapper";
     Object.assign(wrapper.style,{width:Config.SLOT+"px",overflow:"hidden",flexShrink:"0"});
 
     var card=document.createElement("div");
     Object.assign(card.style,{
       width:Config.W+"px",height:Config.H+"px",borderRadius:Config.R+"px",marginRight:Config.GAP+"px",
-      background:todo.color.bg,position:"relative",overflow:"hidden",
+      background:item.color.bg,position:"relative",overflow:"hidden",
     });
-    card.appendChild(scratches(todo.color.accent));
+    card.appendChild(scratches(item.color.accent));
 
     var content=contentContainer("space-between");
 
     var btnRow=document.createElement("div");
     Object.assign(btnRow.style,{display:"flex",justifyContent:"flex-end"});
     btnRow.appendChild(checkButton(function(){
-      Animations.remove(wrapper,card,todo.id);
+      if(opts.onCheck)opts.onCheck();
     }));
     content.appendChild(btnRow);
 
-    content.appendChild(textLabel(todo.text,function(div){
-      Editing.start(content,div,todo);
+    content.appendChild(textLabel(item.text,function(div){
+      Editing.start(content,div,item);
     }));
 
     card.appendChild(content);
     wrapper.appendChild(card);
+
+    if(opts.onTap){
+      card.addEventListener("click",function(e){
+        if(!e.target.closest("button")&&!e.target.closest("input"))opts.onTap();
+      });
+    }
+
     return wrapper;
   }
 
@@ -281,7 +300,7 @@ var CardFactory=(function(){
     var input=document.createElement("input");
     input.type="text";input.inputMode="text";input.enterKeyHint="done";
     input.autocomplete="off";input.spellcheck=false;
-    input.placeholder="Görev adı...";
+    input.placeholder=State.view==="categories"?"Kategori adı...":"Görev adı...";
     Object.assign(input.style,{
       fontWeight:"600",fontSize:"16px",color:"#fff",lineHeight:"1.22",letterSpacing:"-.01em",
       background:"transparent",border:"none",outline:"none",padding:"0",margin:"0",width:"100%",
@@ -331,8 +350,9 @@ var CardFactory=(function(){
   }
 
   // Yeni kartı mevcut karta dönüştür (yerinde — DOM'dan kaldırıp tekrar oluşturmaz)
-  function promote(nc,todo){
-    nc.className="";
+  function promote(nc,item,opts){
+    opts=opts||{};
+    nc.className="card-wrapper";
     var card=nc.firstElementChild;
     var content=card.querySelector(".card-content");
     if(!content)return;
@@ -347,14 +367,21 @@ var CardFactory=(function(){
     var btnRow=document.createElement("div");
     Object.assign(btnRow.style,{display:"flex",justifyContent:"flex-end"});
     btnRow.appendChild(checkButton(function(){
-      Animations.remove(nc,card,todo.id);
+      if(opts.onCheck)opts.onCheck();
     }));
     content.insertBefore(btnRow,content.firstChild);
 
     // Text label
-    content.appendChild(textLabel(todo.text,function(div){
-      Editing.start(content,div,todo);
+    content.appendChild(textLabel(item.text,function(div){
+      Editing.start(content,div,item);
     }));
+
+    // Kart gövdesi tıklama (kategori navigasyonu için)
+    if(opts.onTap){
+      card.addEventListener("click",function(e){
+        if(!e.target.closest("button")&&!e.target.closest("input"))opts.onTap();
+      });
+    }
   }
 
   return {existing:existing, blank:blank, promote:promote, textLabel:textLabel};
@@ -396,10 +423,13 @@ var Animations=(function(){
       fadeOut(card,function(){
         wrapper.style.borderRadius=Config.R+"px";
         collapseWidth(wrapper,function(){
-          State.todos=State.todos.filter(function(t){return t.id!==id;});
+          var list=State.activeList();
+          for(var i=0;i<list.length;i++){
+            if(list[i].id===id){list.splice(i,1);break;}
+          }
           wrapper.remove();
           UI.updateSubtitle();
-          if(State.todos.length===0&&!State.adding)UI.showEmptyState();
+          if(list.length===0&&!State.adding)UI.showEmptyState();
         });
       });
     },
@@ -411,7 +441,8 @@ var Animations=(function(){
         collapseWidth(nc,function(){
           nc.remove();
           UI.updateSubtitle();
-          if(State.todos.length===0&&!State.adding)UI.showEmptyState();
+          var list=State.activeList();
+          if(list.length===0&&!State.adding)UI.showEmptyState();
         });
       });
     }
@@ -492,18 +523,33 @@ var UI=(function(){
     },
 
     updateSubtitle:function(){
-      DOM.subtitle.textContent=(State.todos.length===0&&!State.adding)
-        ?"Hepsini tamamladın!"
-        :"← sola çek veya + ile ekle";
+      var list=State.activeList();
+      if(list.length===0&&!State.adding){
+        DOM.subtitle.textContent=State.view==="categories"?"Henüz kategori yok":"Hepsini tamamladın!";
+      }else{
+        DOM.subtitle.textContent="← sola çek veya + ile ekle";
+      }
     },
 
     renderAll:function(){
       DOM.track.innerHTML="";
-      if(State.todos.length===0&&!State.adding){
+      var list=State.activeList();
+      if(list.length===0&&!State.adding){
         UI.showEmptyState();
       }else{
-        State.todos.forEach(function(todo){
-          DOM.track.appendChild(CardFactory.existing(todo));
+        list.forEach(function(item){
+          var el;
+          if(State.view==="categories"){
+            el=CardFactory.existing(item,{
+              onCheck:function(){},
+              onTap:function(){Navigation.goToTasks(item);}
+            });
+          }else{
+            el=CardFactory.existing(item,{
+              onCheck:function(){Animations.remove(el,el.firstElementChild,item.id);}
+            });
+          }
+          DOM.track.appendChild(el);
         });
         DOM.track.appendChild(spacer());
       }
@@ -522,7 +568,8 @@ var TodoManager={
     DOM.proxyInput.focus({preventScroll:true});
     State.addingLock=true;
     State.adding=true;
-    var color=Config.pickColor(State.todos.map(function(t){return t.color.bg;}));
+    var list=State.activeList();
+    var color=Config.pickColor(list.map(function(t){return t.color.bg;}));
 
     UI.removeEmptyState();
 
@@ -532,12 +579,26 @@ var TodoManager={
   },
 
   confirm:function(text,color){
-    var todo={id:State.nextId++,text:text,color:color};
-    State.todos.unshift(todo);
+    var item={id:State.activeNextId(),text:text,color:color};
+    if(State.view==="categories"){item.todos=[];item.nextTodoId=1;}
+    State.activeList().unshift(item);
     State.adding=false;State.addingLock=false;
 
     var nc=DOM.queryNewCard();
-    if(nc)CardFactory.promote(nc,todo);
+    if(nc){
+      var opts;
+      if(State.view==="categories"){
+        opts={
+          onCheck:function(){},
+          onTap:function(){Navigation.goToTasks(item);}
+        };
+      }else{
+        opts={
+          onCheck:function(){Animations.remove(nc,nc.firstElementChild,item.id);}
+        };
+      }
+      CardFactory.promote(nc,item,opts);
+    }
 
     UI.removeEmptyState();
     UI.updateSubtitle();
@@ -546,10 +607,69 @@ var TodoManager={
   cancel:function(){
     State.adding=false;State.addingLock=false;
     var nc=DOM.queryNewCard();
-    if(!nc){UI.updateSubtitle();if(State.todos.length===0)UI.showEmptyState();return;}
+    var list=State.activeList();
+    if(!nc){UI.updateSubtitle();if(list.length===0)UI.showEmptyState();return;}
     Animations.collapse(nc);
   }
 };
+
+
+/* ═══════════════════════════════════════════
+   NAVIGATION — görünüm geçişleri
+   ═══════════════════════════════════════════ */
+var Navigation=(function(){
+  var transitioning=false;
+
+  function transition(direction,callback){
+    if(transitioning)return;
+    transitioning=true;
+    var block=DOM.contentBlock;
+    var outY=direction==="down"?"30px":"-30px";
+    var inY=direction==="down"?"-30px":"30px";
+
+    block.style.transition="opacity .2s ease, transform .2s ease";
+    block.style.opacity="0";
+    block.style.transform="translateY("+outY+")";
+
+    setTimeout(function(){
+      callback();
+      block.style.transition="none";
+      block.style.transform="translateY("+inY+")";
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){
+          block.style.transition="opacity .25s ease, transform .25s cubic-bezier(.25,1,.5,1)";
+          block.style.opacity="1";
+          block.style.transform="translateY(0)";
+          setTimeout(function(){transitioning=false;},260);
+        });
+      });
+    },220);
+  }
+
+  function updateHeader(){
+    DOM.viewTitle.textContent=State.view==="categories"?"Kategoriler":State.currentCategory.text;
+  }
+
+  return {
+    goToTasks:function(cat){
+      transition("up",function(){
+        State.view="tasks";
+        State.currentCategory=cat;
+        State.lastCategory=cat;
+        updateHeader();
+        UI.renderAll();
+      });
+    },
+    goToCategories:function(){
+      transition("down",function(){
+        State.view="categories";
+        State.currentCategory=null;
+        updateHeader();
+        UI.renderAll();
+      });
+    }
+  };
+})();
 
 
 /* ═══════════════════════════════════════════
@@ -629,13 +749,18 @@ var Gestures=(function(){
         if(Math.abs(dx)<4&&Math.abs(dy)<4)return;
         g.axis=Math.abs(dx)>=Math.abs(dy)?"x":"y";
       }
-      if(g.axis==="y")return;
+      if(g.axis==="y"){g.verticalDy=dy;return;}
       if(!g.pulling&&sc.scrollLeft<2&&dx>4)g.pulling=true;
       if(g.pulling){e.preventDefault();applyPull(dx);}
     },{passive:false});
 
     sc.addEventListener("touchend",function(){
       if(!g.active)return;
+      var vdy=g.verticalDy||0;
+      if(g.axis==="y"&&Math.abs(vdy)>50){
+        if(vdy>50&&State.view==="tasks")Navigation.goToCategories();
+        if(vdy<-50&&State.view==="categories"&&State.lastCategory)Navigation.goToTasks(State.lastCategory);
+      }
       endGesture();
     },{passive:true});
 
@@ -666,6 +791,13 @@ var Gestures=(function(){
 
     // + button
     DOM.addBtn.addEventListener("click",function(){TodoManager.add();});
+
+    // Boşluğa tıklama: task görünümünden kategorilere dön
+    sc.addEventListener("click",function(e){
+      if(State.view!=="tasks")return;
+      if(e.target.closest(".card-wrapper")||e.target.closest("button"))return;
+      Navigation.goToCategories();
+    });
   }
 
   return {init:init};
