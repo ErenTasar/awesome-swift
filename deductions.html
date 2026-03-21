@@ -15,7 +15,7 @@ input::placeholder{color:rgba(255,255,255,.3)}
 </head>
 <body>
 <div id="root">
-  <div style="position:fixed;inset:0;background:#000;overflow:hidden;font-family:-apple-system,'SF Pro Rounded','SF Pro Display',BlinkMacSystemFont,sans-serif">
+  <div id="appContainer" style="position:fixed;top:0;left:0;right:0;height:100%;background:#000;overflow:hidden;font-family:-apple-system,'SF Pro Rounded','SF Pro Display',BlinkMacSystemFont,sans-serif">
     <div style="position:absolute;left:0;right:0;top:100px">
       <div style="padding:0 20px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
         <div>
@@ -42,6 +42,28 @@ input::placeholder{color:rgba(255,255,255,.3)}
 
 <script>
 (function(){
+// --- Layout stabilizasyonu: klavye açılınca container yüksekliği değişmesin ---
+var appContainer=document.getElementById("appContainer");
+var initialHeight=window.innerHeight;
+appContainer.style.height=initialHeight+"px";
+if(window.visualViewport){
+window.visualViewport.addEventListener("resize",function(){
+appContainer.style.height=initialHeight+"px";
+appContainer.style.transform="translateY(0)";
+});
+window.visualViewport.addEventListener("scroll",function(){
+appContainer.style.transform="translateY(0)";
+});
+}
+
+// --- Proxy input: klavye açılması için user gesture zincirinde senkron focus ---
+var proxyInput=document.createElement("input");
+proxyInput.type="text";proxyInput.inputMode="text";
+proxyInput.setAttribute("aria-hidden","true");
+proxyInput.tabIndex=-1;
+Object.assign(proxyInput.style,{position:"fixed",top:"-9999px",left:"-9999px",opacity:"0",width:"1px",height:"1px",border:"none",padding:"0",margin:"0",pointerEvents:"none"});
+document.body.appendChild(proxyInput);
+
 const COLORS=[
 {bg:"#7C3AED",accent:"#A78BFA"},
 {bg:"#E84545",accent:"#FF8A8A"},
@@ -297,10 +319,9 @@ input.addEventListener("blur",function(){setTimeout(submit,250);});
 content.appendChild(input);
 wrapper.appendChild(content);
 
-// Multi-attempt focus
-setTimeout(function(){input.focus();input.click();},0);
-[16,50,100,200,350,500].forEach(function(ms){
-setTimeout(function(){if(document.body.contains(input)){input.focus();input.click();}},ms);
+// Focus transfer: proxy zaten klavyeyi açtı, şimdi gerçek input'a geç
+requestAnimationFrame(function(){
+input.focus();
 });
 
 return wrapper;
@@ -330,6 +351,8 @@ if(todos.length===0)showEmptyState();
 
 function doAdd(){
 if(addingLock)return;
+// Senkron proxy focus — user gesture zincirinde klavyeyi aktifleştirir
+proxyInput.focus();
 addingLock=true;adding=true;
 const usedColors=todos.map(t=>t.color.bg);
 newCol=rndColor(usedColors);
