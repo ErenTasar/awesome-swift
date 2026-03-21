@@ -46,6 +46,8 @@ input::placeholder { color: rgba(255,255,255,.3) }
         </div>
       </div>
     </div>
+    <div id="peekBelow" style="position:absolute;left:0;right:0;pointer-events:none;overflow:hidden;height:80px;opacity:0;transition:opacity .3s"></div>
+    <div id="peekAbove" style="position:absolute;left:0;right:0;pointer-events:none;overflow:hidden;height:80px;opacity:0;transition:opacity .3s"></div>
   </div>
 </div>
 
@@ -175,6 +177,8 @@ var DOM={
   pullIndicator: document.getElementById("pullIndicator"),
   viewTitle:     document.getElementById("viewTitle"),
   proxyInput:    null, // Layout.init içinde oluşturulacak
+  peekBelow:     document.getElementById("peekBelow"),
+  peekAbove:     document.getElementById("peekAbove"),
 
   queryNewCard:function(){return this.track.querySelector(".new-card");}
 };
@@ -191,6 +195,7 @@ var Layout=(function(){
     DOM.appContainer.style.height=initialHeight+"px";
     fixedTop=Math.max(40,Math.round(initialHeight*0.38-Config.CONTENT_HEIGHT/2));
     DOM.contentBlock.style.top=fixedTop+"px";
+    Peek.position(fixedTop);
 
     // Proxy input: klavye açılması için user gesture zincirinde senkron focus
     var proxy=document.createElement("input");
@@ -659,8 +664,72 @@ var UI=(function(){
         DOM.track.appendChild(spacer());
       }
       UI.updateSubtitle();
+      Peek.update();
     }
   };
+})();
+
+
+/* ═══════════════════════════════════════════
+   PEEK — Blurred mini-card preview of the other view layer
+   ═══════════════════════════════════════════ */
+var Peek=(function(){
+  var SCALE=0.55;
+  var BLUR=6;
+  var OPACITY=0.2;
+
+  function miniCards(list){
+    var d=document.createElement("div");
+    d.style.cssText="display:flex;gap:"+(Config.GAP*SCALE)+"px;padding-left:"+(20*SCALE)+"px";
+    list.forEach(function(item){
+      var c=document.createElement("div");
+      c.style.cssText="width:"+(Config.W*SCALE)+"px;height:"+(Config.H*SCALE)
+        +"px;border-radius:"+(Config.R*SCALE)+"px;background:"+item.color.bg
+        +";flex-shrink:0;opacity:"+OPACITY;
+      d.appendChild(c);
+    });
+    return d;
+  }
+
+  function applyMask(el,direction){
+    el.style.filter="blur("+BLUR+"px)";
+    var grad="linear-gradient(to "+direction+", rgba(0,0,0,.6), transparent)";
+    el.style.maskImage=grad;
+    el.style.webkitMaskImage=grad;
+  }
+
+  function update(){
+    DOM.peekBelow.innerHTML="";
+    DOM.peekAbove.innerHTML="";
+
+    if(State.view==="categories"&&State.lastCategory&&State.lastCategory.todos.length>0){
+      DOM.peekBelow.appendChild(miniCards(State.lastCategory.todos));
+      applyMask(DOM.peekBelow,"bottom");
+      DOM.peekBelow.style.opacity="1";
+    }else{
+      DOM.peekBelow.style.opacity="0";
+    }
+
+    if(State.view==="tasks"&&State.categories.length>0){
+      DOM.peekAbove.appendChild(miniCards(State.categories));
+      applyMask(DOM.peekAbove,"top");
+      DOM.peekAbove.style.opacity="1";
+    }else{
+      DOM.peekAbove.style.opacity="0";
+    }
+  }
+
+  function position(fixedTop){
+    DOM.peekBelow.style.top=(fixedTop+Config.CONTENT_HEIGHT+40)+"px";
+    DOM.peekAbove.style.top=(fixedTop-75)+"px";
+  }
+
+  function hide(){
+    DOM.peekBelow.style.opacity="0";
+    DOM.peekAbove.style.opacity="0";
+  }
+
+  return {update:update,position:position,hide:hide};
 })();
 
 
@@ -804,6 +873,7 @@ var Navigation=(function(){
   // ── Tap ile crossfade (WAAPI — compositor thread) ──
   function crossfade(direction,prepareState){
     cleanup();
+    Peek.hide();
     var sign=direction==="down"?1:-1;
 
     createSnapshot();
@@ -826,6 +896,7 @@ var Navigation=(function(){
   // ── Progressive swipe ──
   function startSwipe(direction){
     cleanup();
+    Peek.hide();
     swipeGen++;
     var myGen=swipeGen;
     viewReady=false;
