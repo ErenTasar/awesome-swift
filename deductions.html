@@ -14,7 +14,7 @@ input::placeholder{color:rgba(255,255,255,.3)}
 </head>
 <body>
 <div id="root">
-  <div id="appContainer" style="position:fixed;top:0;left:0;right:0;height:100%;background:#000;overflow:hidden;font-family:-apple-system,'SF Pro Rounded','SF Pro Display',BlinkMacSystemFont,sans-serif">
+  <div id="appContainer" style="position:fixed;top:0;left:0;right:0;height:100%;background:#000;overflow:hidden;touch-action:none;font-family:-apple-system,'SF Pro Rounded','SF Pro Display',BlinkMacSystemFont,sans-serif">
     <div id="contentBlock" style="position:absolute;left:0;right:0;top:130px;will-change:opacity,transform">
       <div style="padding:0 20px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
         <div>
@@ -31,7 +31,7 @@ input::placeholder{color:rgba(255,255,255,.3)}
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </div>
         </div>
-        <div id="scrollContainer" style="overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;position:relative;z-index:1;user-select:none;-webkit-user-select:none">
+        <div id="scrollContainer" style="overflow-x:auto;overflow-y:hidden;position:relative;z-index:1;user-select:none;-webkit-user-select:none">
           <div id="track" style="display:flex;padding:0 20px;transition:transform .3s cubic-bezier(.25,1,.5,1)"></div>
         </div>
       </div>
@@ -60,6 +60,10 @@ var Config={
   get SLOT(){return this.W+this.GAP;},
   PULL_THRESHOLD:68,
   PULL_MAX:90,
+  AXIS_THRESHOLD:8,
+  AXIS_RATIO:1.5,
+  MOMENTUM_FRICTION:0.95,
+  MOMENTUM_MIN:0.5,
   SCRATCHES:[
     [15,8,185,132,2.8],[35,3,195,118,2],[8,35,165,137,2.4],
     [55,0,198,95,1.6],[3,60,145,138,2.2],[75,2,197,78,1.4]
@@ -852,7 +856,9 @@ var Navigation=(function(){
    ═══════════════════════════════════════════ */
 var Gestures=(function(){
   var g={active:false};
+  var momentumRAF=null;
 
+  // ── Pull-to-add helpers (değişmedi) ──
   function dampedPull(rawDx){
     var l=rawDx*0.55;
     return l<=Config.PULL_MAX?l:Config.PULL_MAX+(l-Config.PULL_MAX)*0.15;
@@ -893,129 +899,196 @@ var Gestures=(function(){
     updateIndicator(g.pullVal);
   }
 
-  function endGesture(){
-    if(g.pulling&&(g.pullVal||0)>Config.PULL_THRESHOLD){
-      commitPull(g.pullVal||0);
-    }else{
-      resetVisuals();
-    }
-    g={active:false};
-  }
-
   function isInteractive(target){
     return target.closest("button")||target.closest("input");
   }
 
-  function init(){
-    var sc=DOM.scrollContainer;
+  // ── Çapraz koruma: axis detection ──
+  function detectAxis(dx,dy){
+    var adx=Math.abs(dx),ady=Math.abs(dy);
+    if(adx<Config.AXIS_THRESHOLD&&ady<Config.AXIS_THRESHOLD)return null;
+    if(adx>ady*Config.AXIS_RATIO)return "x";
+    if(ady>adx*Config.AXIS_RATIO)return "y";
+    return null;
+  }
 
-    // Touch — sadece yatay (scroll + pull-to-add)
-    sc.addEventListener("touchstart",function(e){
+  // ── Momentum: rAF tabanlı, frame-rate bağımsız ──
+  function cancelMomentum(){
+    if(momentumRAF){cancelAnimationFrame(momentumRAF);momentumRAF=null;}
+  }
+
+  function startMomentum(vel){
+    cancelMomentum();
+    var sc=DOM.scrollContainer;
+    var lastT=performance.now();
+    function step(now){
+      var dt=now-lastT;lastT=now;
+      vel*=Math.pow(Config.MOMENTUM_FRICTION,dt/16.67);
+      if(Math.abs(vel)<Config.MOMENTUM_MIN){momentumRAF=null;return;}
+      sc.scrollLeft-=vel;
+      if(sc.scrollLeft<=0||sc.scrollLeft>=sc.scrollWidth-sc.clientWidth){momentumRAF=null;return;}
+      momentumRAF=requestAnimationFrame(step);
+    }
+    momentumRAF=requestAnimationFrame(step);
+  }
+
+  // ── Velocity tracker: son 100ms örnekleri ──
+  function createVelocityTracker(){
+    var samples=[];
+    return {
+      add:function(x){
+        var now=performance.now();
+        samples.push({x:x,t:now});
+        while(samples.length>0&&now-samples[0].t>100)samples.shift();
+      },
+      get:function(){
+        if(samples.length<2)return 0;
+        var f=samples[0],l=samples[samples.length-1];
+        var dt=l.t-f.t;
+        if(dt<1)return 0;
+        return(l.x-f.x)/dt*16.67;
+      },
+      reset:function(){samples=[];}
+    };
+  }
+
+  // ── INIT: birleşik handler ──
+  function init(){
+    var ac=DOM.appContainer;
+    var sc=DOM.scrollContainer;
+    var vel=createVelocityTracker();
+
+    // ── TOUCH: hepsi appContainer üzerinde ──
+    ac.addEventListener("touchstart",function(e){
       if(isInteractive(e.target))return;
+      cancelMomentum();
       var t=e.touches[0];
-      g={active:true,pulling:false,startX:t.clientX,startY:t.clientY,axis:null};
+      g={active:true,pulling:false,startX:t.clientX,startY:t.clientY,lastX:t.clientX,
+         axis:null,dy:0,swiping:false,direction:null,pullVal:0};
+      vel.reset();
+      vel.add(t.clientX);
     },{passive:true});
 
-    sc.addEventListener("touchmove",function(e){
+    ac.addEventListener("touchmove",function(e){
       if(!g.active)return;
       var t=e.touches[0];
-      var dx=t.clientX-g.startX,dy=t.clientY-g.startY;
+      var dx=t.clientX-g.startX;
+      var dy=t.clientY-g.startY;
+
       if(!g.axis){
-        if(Math.abs(dx)<4&&Math.abs(dy)<4)return;
-        g.axis=Math.abs(dx)>=Math.abs(dy)?"x":"y";
+        g.axis=detectAxis(dx,dy);
+        if(!g.axis)return;
+        if(g.axis==="x")g.lastX=t.clientX; // atlama önle
       }
-      if(g.axis==="y")return; // dikey: appContainer halleder
-      if(!g.pulling&&sc.scrollLeft<2&&dx>4)g.pulling=true;
-      if(g.pulling){e.preventDefault();applyPull(dx);}
+
+      // ── YATAY: scroll veya pull-to-add ──
+      if(g.axis==="x"){
+        e.preventDefault();
+        vel.add(t.clientX);
+        var frameDx=t.clientX-g.lastX;
+        g.lastX=t.clientX;
+
+        if(!g.pulling&&sc.scrollLeft<2&&dx>4)g.pulling=true;
+
+        if(g.pulling){
+          applyPull(dx);
+        }else{
+          sc.scrollLeft-=frameDx;
+        }
+        return;
+      }
+
+      // ── DİKEY: kategori↔task geçişi ──
+      e.preventDefault();
+      g.dy=dy;
+
+      if(State.adding||Navigation.isTransitioning())return;
+
+      if(!g.swiping&&Math.abs(dy)>15){
+        var dir=dy>0?"down":"up";
+        var canSwipe=(dir==="down"&&State.view==="tasks")||
+                     (dir==="up"&&State.view==="categories"&&State.lastCategory);
+        if(canSwipe){g.swiping=true;g.direction=dir;Navigation.startSwipe(dir);}
+      }
+
+      if(g.swiping){
+        var progress=Math.min(Math.abs(dy)/200,1);
+        Navigation.updateSwipe(progress,g.direction);
+      }
     },{passive:false});
 
-    sc.addEventListener("touchend",function(){
+    ac.addEventListener("touchend",function(){
       if(!g.active)return;
-      endGesture(); // sadece pull-to-add finalize
+
+      // Yatay finalize
+      if(g.axis==="x"){
+        if(g.pulling&&(g.pullVal||0)>Config.PULL_THRESHOLD){
+          commitPull(g.pullVal||0);
+        }else if(g.pulling){
+          resetVisuals();
+        }else{
+          var v=vel.get();
+          if(Math.abs(v)>Config.MOMENTUM_MIN)startMomentum(v);
+        }
+      }
+
+      // Dikey finalize
+      if(g.swiping){
+        var progress=Math.min(Math.abs(g.dy)/200,1);
+        Navigation.endSwipe(progress>0.2,g.direction);
+      }
+
+      g={active:false};
     },{passive:true});
 
-    sc.addEventListener("touchcancel",function(){
-      if(!g.active)return;
-      resetVisuals();g={active:false};
+    ac.addEventListener("touchcancel",function(){
+      if(g.pulling)resetVisuals();
+      if(g.swiping)Navigation.endSwipe(false,g.direction);
+      g={active:false};
     },{passive:true});
 
-    // Mouse
-    sc.addEventListener("mousedown",function(e){
+    // ── MOUSE: appContainer üzerinde ──
+    ac.addEventListener("mousedown",function(e){
       if(isInteractive(e.target))return;
-      g={active:true,pulling:false,startX:e.clientX,axis:"x",mouse:true,sl:sc.scrollLeft||0};
+      cancelMomentum();
+      g={active:true,pulling:false,startX:e.clientX,startY:e.clientY,lastX:e.clientX,
+         axis:null,mouse:true,pullVal:0};
       e.preventDefault();
     });
 
     window.addEventListener("mousemove",function(e){
       if(!g.active||!g.mouse)return;
       var dx=e.clientX-g.startX;
-      if(!g.pulling&&g.sl<2&&dx>4)g.pulling=true;
+      var dy=e.clientY-g.startY;
+
+      if(!g.axis){
+        g.axis=detectAxis(dx,dy);
+        if(!g.axis)return;
+        if(g.axis==="x")g.lastX=e.clientX;
+      }
+      if(g.axis!=="x")return;
+
+      var frameDx=e.clientX-g.lastX;
+      g.lastX=e.clientX;
+
+      if(!g.pulling&&sc.scrollLeft<2&&dx>4)g.pulling=true;
+
       if(g.pulling){applyPull(dx);}
-      else{sc.scrollLeft=g.sl-dx;}
+      else{sc.scrollLeft-=frameDx;}
     });
 
     window.addEventListener("mouseup",function(){
       if(!g.active||!g.mouse)return;
-      endGesture();
+      if(g.pulling&&(g.pullVal||0)>Config.PULL_THRESHOLD){
+        commitPull(g.pullVal||0);
+      }else if(g.pulling){
+        resetVisuals();
+      }
+      g={active:false};
     });
 
     // + button
     DOM.addBtn.addEventListener("click",function(){TodoManager.add();});
-
-    // Dikey swipe: appContainer seviyesinde — progressive transition
-    var vg={active:false};
-    DOM.appContainer.addEventListener("touchstart",function(e){
-      var t=e.touches[0];
-      vg={active:true,startX:t.clientX,startY:t.clientY,dy:0,axis:null,swiping:false,direction:null};
-    },{passive:true});
-
-    DOM.appContainer.addEventListener("touchmove",function(e){
-      if(!vg.active)return;
-      var t=e.touches[0];
-      var dx=t.clientX-vg.startX;
-      var dy=t.clientY-vg.startY;
-      vg.dy=dy;
-
-      // Axis detection: yatay ise dokunma → native scroll çalışsın
-      if(!vg.axis){
-        if(Math.abs(dx)<8&&Math.abs(dy)<8)return;
-        vg.axis=Math.abs(dy)>Math.abs(dx)?"y":"x";
-      }
-      if(vg.axis!=="y")return; // yatay → müdahale etme
-
-      e.preventDefault();
-
-      // Ekleme modundayken veya transition sırasında swipe başlatma
-      if(State.adding||Navigation.isTransitioning())return;
-
-      // Swipe yönünü belirle ve başlat
-      if(!vg.swiping&&Math.abs(dy)>15){
-        var dir=dy>0?"down":"up";
-        var canSwipe=(dir==="down"&&State.view==="tasks")||
-                     (dir==="up"&&State.view==="categories"&&State.lastCategory);
-        if(canSwipe){vg.swiping=true;vg.direction=dir;Navigation.startSwipe(dir);}
-      }
-
-      // Progressive transition güncelle
-      if(vg.swiping){
-        var progress=Math.min(Math.abs(dy)/200,1);
-        Navigation.updateSwipe(progress,vg.direction);
-      }
-    },{passive:false});
-
-    DOM.appContainer.addEventListener("touchend",function(){
-      if(!vg.active)return;
-      if(vg.swiping){
-        var progress=Math.min(Math.abs(vg.dy)/200,1);
-        Navigation.endSwipe(progress>0.2,vg.direction);
-      }
-      vg={active:false};
-    },{passive:true});
-
-    DOM.appContainer.addEventListener("touchcancel",function(){
-      if(vg.swiping)Navigation.endSwipe(false,vg.direction);
-      vg={active:false};
-    },{passive:true});
   }
 
   return {init:init};
