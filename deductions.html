@@ -50,7 +50,7 @@ var CONTENT_HEIGHT=190; // başlık(~50) + kartlar(~124) + padding(~16)
 appContainer.style.height=initialHeight+"px";
 
 function positionContent(){
-var visibleH=window.visualViewport?window.visualViewport.height:window.innerHeight;
+var visibleH=initialHeight;
 var top=Math.max(40,Math.round((visibleH-CONTENT_HEIGHT)/2));
 contentBlock.style.top=top+"px";
 }
@@ -69,7 +69,6 @@ document.body.scrollTop=0;
 if(window.visualViewport){
 window.visualViewport.addEventListener("resize",function(){
 appContainer.style.height=initialHeight+"px";
-positionContent();
 compensateScroll();
 });
 window.visualViewport.addEventListener("scroll",function(){
