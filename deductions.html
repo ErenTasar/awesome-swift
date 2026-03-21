@@ -35,19 +35,29 @@ input::placeholder { color: rgba(255,255,255,.3) }
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div>
-      <div style="position:relative;padding:10px 0">
-        <div id="pullIndicator" style="position:absolute;left:20px;top:50%;margin-top:-24px;z-index:0;width:48px;height:48px;border-radius:14px;border:2px dashed rgba(255,255,255,.15);background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;opacity:0;transform:translateX(-56px) scale(.3);transition:border-color .15s,background .15s;pointer-events:none">
-          <div class="pull-icon" style="color:rgba(255,255,255,.5);display:flex;transition:color .15s">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <div id="rowContainer" style="position:relative">
+        <div id="row1Wrap" style="overflow:hidden;height:0;opacity:0;pointer-events:none">
+          <div style="overflow:hidden;padding:6px 0">
+            <div id="row1Track" style="display:flex;padding:0 0 0 15px;gap:9px;will-change:transform"></div>
           </div>
         </div>
-        <div id="scrollContainer" style="overflow-x:auto;overflow-y:hidden;position:relative;z-index:1;user-select:none;-webkit-user-select:none">
-          <div id="track" style="display:flex;padding:0 0 0 20px"></div>
+        <div id="row2Wrap" style="position:relative;padding:10px 0">
+          <div id="pullIndicator" style="position:absolute;left:20px;top:50%;margin-top:-24px;z-index:0;width:48px;height:48px;border-radius:14px;border:2px dashed rgba(255,255,255,.15);background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;opacity:0;transform:translateX(-56px) scale(.3);transition:border-color .15s,background .15s;pointer-events:none">
+            <div class="pull-icon" style="color:rgba(255,255,255,.5);display:flex;transition:color .15s">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </div>
+          </div>
+          <div id="row2Scroll" style="overflow-x:auto;overflow-y:hidden;position:relative;z-index:1;user-select:none;-webkit-user-select:none">
+            <div id="row2Track" style="display:flex;padding:0 0 0 20px"></div>
+          </div>
+        </div>
+        <div id="row3Wrap" style="overflow:hidden;height:0;opacity:0;pointer-events:none">
+          <div style="overflow:hidden;padding:6px 0">
+            <div id="row3Track" style="display:flex;padding:0 0 0 15px;gap:9px;will-change:transform"></div>
+          </div>
         </div>
       </div>
     </div>
-    <div id="peekBelow" style="position:absolute;left:0;right:0;pointer-events:none;overflow:hidden;height:100px;opacity:0;transition:opacity .3s"></div>
-    <div id="peekAbove" style="position:absolute;left:0;right:0;pointer-events:none;overflow:hidden;height:100px;opacity:0;transition:opacity .3s"></div>
   </div>
 </div>
 
@@ -170,17 +180,21 @@ var State={
 var DOM={
   appContainer:  document.getElementById("appContainer"),
   contentBlock:  document.getElementById("contentBlock"),
-  track:         document.getElementById("track"),
+  rowContainer:  document.getElementById("rowContainer"),
+  row1Wrap:      document.getElementById("row1Wrap"),
+  row1Track:     document.getElementById("row1Track"),
+  row2Wrap:      document.getElementById("row2Wrap"),
+  row2Scroll:    document.getElementById("row2Scroll"),
+  row2Track:     document.getElementById("row2Track"),
+  row3Wrap:      document.getElementById("row3Wrap"),
+  row3Track:     document.getElementById("row3Track"),
   subtitle:      document.getElementById("subtitle"),
   addBtn:        document.getElementById("addBtn"),
-  scrollContainer:document.getElementById("scrollContainer"),
   pullIndicator: document.getElementById("pullIndicator"),
   viewTitle:     document.getElementById("viewTitle"),
   proxyInput:    null, // Layout.init içinde oluşturulacak
-  peekBelow:     document.getElementById("peekBelow"),
-  peekAbove:     document.getElementById("peekAbove"),
 
-  queryNewCard:function(){return this.track.querySelector(".new-card");}
+  queryNewCard:function(){return this.row2Track.querySelector(".new-card");}
 };
 
 
@@ -195,7 +209,7 @@ var Layout=(function(){
     DOM.appContainer.style.height=initialHeight+"px";
     fixedTop=Math.max(40,Math.round(initialHeight*0.38-Config.CONTENT_HEIGHT/2));
     DOM.contentBlock.style.top=fixedTop+"px";
-    Peek.position(fixedTop);
+    RowManager.position(fixedTop);
 
     // Proxy input: klavye açılması için user gesture zincirinde senkron focus
     var proxy=document.createElement("input");
@@ -611,7 +625,7 @@ var UI=(function(){
 
   return {
     showEmptyState:function(){
-      var existing=DOM.track.querySelector(".empty-state");
+      var existing=DOM.row2Track.querySelector(".empty-state");
       if(existing)existing.remove();
 
       var empty=document.createElement("div");
@@ -622,12 +636,12 @@ var UI=(function(){
         justifyContent:"center",flexDirection:"column",gap:"6px",
       });
       empty.innerHTML='<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg><span style="font-size:12px;color:rgba(255,255,255,.15);font-weight:600">Harika!</span>';
-      DOM.track.appendChild(empty);
-      DOM.track.appendChild(spacer());
+      DOM.row2Track.appendChild(empty);
+      DOM.row2Track.appendChild(spacer());
     },
 
     removeEmptyState:function(){
-      var el=DOM.track.querySelector(".empty-state");
+      var el=DOM.row2Track.querySelector(".empty-state");
       if(el)el.remove();
     },
 
@@ -641,180 +655,220 @@ var UI=(function(){
     },
 
     renderAll:function(){
-      DOM.track.innerHTML="";
-      DOM.scrollContainer.scrollLeft=0;Peek.syncScroll(0);
-      var list=State.activeList();
-      if(list.length===0&&!State.adding){
-        UI.showEmptyState();
-      }else{
-        list.forEach(function(item){
-          var el;
-          if(State.view==="categories"){
-            el=CardFactory.existing(item,{
-              isCategory:true,
-              onTap:function(){Navigation.goToTasks(item);}
-            });
-          }else{
-            el=CardFactory.existing(item,{
-              onCheck:function(){Animations.remove(el,el.firstElementChild,item.id);}
-            });
-          }
-          DOM.track.appendChild(el);
-        });
-        DOM.track.appendChild(spacer());
-      }
+      RowManager.populate();
       UI.updateSubtitle();
-      Peek.update();
     }
   };
 })();
 
 
 /* ═══════════════════════════════════════════
-   PEEK — Blurred mini-card preview of the other view layer
+   ROW MANAGER — 3-satır layout: pasif satırlar + aktif satır
    ═══════════════════════════════════════════ */
-var Peek=(function(){
+var RowManager=(function(){
   var SCALE=0.75;
-  var SCALE_H=0.6;
-  var storedFixedTop=0;
-  var CARD_AREA_OFFSET=52;
-  var MASK_ALPHA_ABOVE=0.32;
-  var MASK_ALPHA_BELOW=0.25;
-  var PARALLAX_ABOVE=0.45;
-  var PARALLAX_BELOW=0.55;
+  var PARALLAX=0.75;
+  var ROW_GAP=16;
+  var PASSIVE_OPACITY=0.5;
+  var MASK_UP="linear-gradient(to top, rgba(0,0,0,0.3) 10%, transparent 85%)";
+  var MASK_DOWN="linear-gradient(to bottom, rgba(0,0,0,0.25) 10%, transparent 85%)";
+  var PASSIVE_ROW_H=Math.round(Config.H*SCALE)+12; // kart + padding
 
-  function miniCards(list){
-    var d=document.createElement("div");
-    d.style.cssText="display:flex;gap:"+(Config.GAP*SCALE)+"px;padding-left:"+(20*SCALE)+"px";
-    list.forEach(function(item){
-      var c=document.createElement("div");
-      c.style.cssText="width:"+(Config.W*SCALE)+"px;height:"+(Config.H*SCALE_H)
-        +"px;border-radius:"+(Config.R*SCALE_H)+"px;background:"+item.color.bg
-        +";flex-shrink:0";
-      d.appendChild(c);
+  function miniCard(item){
+    var c=document.createElement("div");
+    Object.assign(c.style,{
+      width:Math.round(Config.W*SCALE)+"px",
+      height:Math.round(Config.H*SCALE)+"px",
+      borderRadius:Math.round(Config.R*SCALE)+"px",
+      background:item.color.bg,flexShrink:"0"
     });
-    return d;
+    return c;
   }
 
-  function applyMask(el,direction,alpha){
-    el.style.filter="none";
-    el.style.opacity="1";
-    var grad="linear-gradient(to "+direction+", rgba(0,0,0,"+alpha+") 10%, transparent 70%)";
-    el.style.maskImage=grad;
-    el.style.webkitMaskImage=grad;
+  function placeholderCard(onTap){
+    var c=document.createElement("div");
+    Object.assign(c.style,{
+      width:Math.round(Config.W*SCALE)+"px",
+      height:Math.round(Config.H*SCALE)+"px",
+      borderRadius:Math.round(Config.R*SCALE)+"px",
+      border:"2px dashed rgba(255,255,255,.08)",flexShrink:"0",
+      display:"flex",alignItems:"center",justifyContent:"center",
+      cursor:onTap?"pointer":"default",
+      pointerEvents:onTap?"auto":"none"
+    });
+    c.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+    if(onTap)c.addEventListener("click",onTap);
+    return c;
   }
 
-  function update(){
-    DOM.peekBelow.innerHTML="";
-    DOM.peekAbove.innerHTML="";
+  function miniSpacer(){
+    var s=document.createElement("div");
+    Object.assign(s.style,{width:Math.round(40*SCALE)+"px",flexShrink:"0"});
+    return s;
+  }
 
-    if(State.view==="categories"&&State.lastCategory&&State.lastCategory.todos.length>0){
-      DOM.peekBelow.appendChild(miniCards(State.lastCategory.todos));
-      applyMask(DOM.peekBelow,"bottom",MASK_ALPHA_BELOW);
+  function fillPassiveRow(track,list){
+    track.innerHTML="";
+    list.forEach(function(item){track.appendChild(miniCard(item));});
+    track.appendChild(miniSpacer());
+  }
+
+  function stylePassive(wrap,direction){
+    wrap.style.opacity=String(PASSIVE_OPACITY);
+    var mask=direction==="up"?MASK_UP:MASK_DOWN;
+    wrap.style.maskImage=mask;
+    wrap.style.webkitMaskImage=mask;
+    wrap.style.filter="blur(0.5px)";
+    wrap.style.pointerEvents="none";
+    wrap.style.height=PASSIVE_ROW_H+"px";
+    wrap.style.overflow="hidden";
+    wrap.style.marginBottom=direction==="up"?ROW_GAP+"px":"0";
+    wrap.style.marginTop=direction==="down"?ROW_GAP+"px":"0";
+  }
+
+  function hideRow(wrap){
+    wrap.style.height="0";
+    wrap.style.opacity="0";
+    wrap.style.overflow="hidden";
+    wrap.style.marginBottom="0";
+    wrap.style.marginTop="0";
+    wrap.style.pointerEvents="none";
+    wrap.style.maskImage="none";
+    wrap.style.webkitMaskImage="none";
+    wrap.style.filter="none";
+    // Track'i temizle ama DOM yapısını koru
+    var track=wrap===DOM.row1Wrap?DOM.row1Track:DOM.row3Track;
+    track.innerHTML="";
+    track.style.transform="";
+  }
+
+  function spacer(){
+    var s=document.createElement("div");
+    Object.assign(s.style,{width:"40px",flexShrink:"0"});
+    return s;
+  }
+
+  function renderActiveRow(){
+    DOM.row2Track.innerHTML="";
+    DOM.row2Scroll.scrollLeft=0;
+    var list=State.activeList();
+    if(list.length===0&&!State.adding){
+      UI.showEmptyState();
     }else{
-      DOM.peekBelow.style.opacity="0";
+      list.forEach(function(item){
+        var el;
+        if(State.view==="categories"){
+          el=CardFactory.existing(item,{
+            isCategory:true,
+            onTap:function(){Navigation.goToTasks(item);}
+          });
+        }else{
+          el=CardFactory.existing(item,{
+            onCheck:function(){Animations.remove(el,el.firstElementChild,item.id);}
+          });
+        }
+        DOM.row2Track.appendChild(el);
+      });
+      DOM.row2Track.appendChild(spacer());
+    }
+  }
+
+  function populate(){
+    if(State.view==="categories"){
+      // Row 1: gizli
+      hideRow(DOM.row1Wrap);
+
+      // Row 2: kategoriler (aktif)
+      renderActiveRow();
+
+      // Row 3: ilk kategorinin taskleri veya placeholder
+      var previewCat=State.lastCategory||State.categories[0];
+      if(previewCat&&previewCat.todos.length>0){
+        fillPassiveRow(DOM.row3Track,previewCat.todos);
+      }else{
+        DOM.row3Track.innerHTML="";
+        DOM.row3Track.appendChild(placeholderCard(function(){
+          var cat=previewCat||State.categories[0];
+          if(cat)Navigation.goToTasks(cat);
+        }));
+      }
+      stylePassive(DOM.row3Wrap,"down");
+    }else{
+      // Row 1: kategoriler
+      fillPassiveRow(DOM.row1Track,State.categories);
+      stylePassive(DOM.row1Wrap,"up");
+
+      // Row 2: taskler (aktif)
+      renderActiveRow();
+
+      // Row 3: placeholder
+      DOM.row3Track.innerHTML="";
+      DOM.row3Track.appendChild(placeholderCard(function(){
+        Navigation.goToCategories();
+      }));
+      stylePassive(DOM.row3Wrap,"down");
+    }
+    syncScroll(DOM.row2Scroll.scrollLeft);
+  }
+
+  function syncScroll(row2Left){
+    var target1=row2Left*PARALLAX;
+    var target3=row2Left*PARALLAX;
+
+    // Boundary deceleration: Row 1
+    var parent1=DOM.row1Track.parentElement;
+    if(parent1){
+      var max1=DOM.row1Track.scrollWidth-parent1.clientWidth;
+      if(max1>0&&target1>max1){
+        var over=target1-max1;
+        target1=max1+over*0.15;
+      }
     }
 
-    if(State.view==="tasks"&&State.categories.length>0){
-      DOM.peekAbove.appendChild(miniCards(State.categories));
-      applyMask(DOM.peekAbove,"top",MASK_ALPHA_ABOVE);
-    }else{
-      DOM.peekAbove.style.opacity="0";
+    // Boundary deceleration: Row 3
+    var parent3=DOM.row3Track.parentElement;
+    if(parent3){
+      var max3=DOM.row3Track.scrollWidth-parent3.clientWidth;
+      if(max3>0&&target3>max3){
+        var over=target3-max3;
+        target3=max3+over*0.15;
+      }
     }
+
+    DOM.row1Track.style.transform="translateX("+(-target1)+"px)";
+    DOM.row3Track.style.transform="translateX("+(-target3)+"px)";
+  }
+
+  function bounce(overscrollPx){
+    var dur=580;
+    var ease="cubic-bezier(.25,1.05,.5,.98)";
+    var p=PARALLAX;
+    [DOM.row1Track,DOM.row3Track].forEach(function(track){
+      if(!track||!track.firstChild)return;
+      var cur=track.style.transform;
+      var base=0;
+      if(cur){var m=cur.match(/translateX\(([-\d.]+)px\)/);if(m)base=parseFloat(m[1]);}
+      track.animate([
+        {transform:"translateX("+(base+overscrollPx*p)+"px)"},
+        {transform:"translateX("+base+"px)"}
+      ],{duration:dur,easing:ease,fill:"none"});
+    });
   }
 
   function position(fixedTop){
-    storedFixedTop=fixedTop;
-    DOM.peekBelow.style.top=(fixedTop+Config.CONTENT_HEIGHT+36)+"px";
-    DOM.peekAbove.style.top=(fixedTop-55)+"px";
+    // Satırlar contentBlock içinde doğal akışta — özel konumlandırma gerekmez
   }
 
-  function hide(){
-    DOM.peekBelow.style.opacity="0";
-    DOM.peekAbove.style.opacity="0";
-  }
-
-  // ── Parallax: ana scroll ile senkron ──
-
-  function syncScroll(scrollLeft){
-    var aboveInner=DOM.peekAbove.firstChild;
-    var belowInner=DOM.peekBelow.firstChild;
-    if(aboveInner)aboveInner.style.transform="translateX("+(-scrollLeft*PARALLAX_ABOVE)+"px)";
-    if(belowInner)belowInner.style.transform="translateX("+(-scrollLeft*PARALLAX_BELOW)+"px)";
-  }
-
-  // ── Bounce: kenar çarpışmasında peek de seksin ──
-
-  function peekBounce(overscrollPx){
-    var sc=DOM.scrollContainer.scrollLeft;
-    var aboveInner=DOM.peekAbove.firstChild;
-    var belowInner=DOM.peekBelow.firstChild;
-    var dur=580; // ana bounce 480ms — peek daha yavaş
-    var ease="cubic-bezier(.25,1.05,.5,.98)";
-    if(aboveInner){
-      var base=-sc*PARALLAX_ABOVE;
-      aboveInner.animate([
-        {transform:"translateX("+(base+overscrollPx*PARALLAX_ABOVE)+"px)"},
-        {transform:"translateX("+base+"px)"}
-      ],{duration:dur,easing:ease,fill:"none"});
-    }
-    if(belowInner){
-      var base=-sc*PARALLAX_BELOW;
-      belowInner.animate([
-        {transform:"translateX("+(base+overscrollPx*PARALLAX_BELOW)+"px)"},
-        {transform:"translateX("+base+"px)"}
-      ],{duration:dur,easing:ease,fill:"none"});
-    }
-  }
-
-  // ── Morph: peek → gerçek kartlara dönüşüm (fazlı zamanlama) ──
-
-  function animateStart(direction){
-    var active=direction==="up"?DOM.peekBelow:DOM.peekAbove;
-    var other=direction==="up"?DOM.peekAbove:DOM.peekBelow;
-    other.style.opacity="0";
-    if(!active.firstChild||active.style.opacity==="0")return null;
-    active.style.transition="none";
-    active.style.zIndex="20";
-    return active;
-  }
-
-  function animateProgress(el,progress,direction){
-    var p=Math.min(progress,1);
-    var sx=SCALE+p*(1-SCALE);
-    var sy=SCALE_H+p*(1-SCALE_H);
-    var peekTop=parseFloat(el.style.top);
-    var targetTop=storedFixedTop+CARD_AREA_OFFSET;
-    var dy=(targetTop-peekTop)*p;
-    el.style.transform="translateY("+dy+"px) scale("+sx+","+sy+")";
-    el.style.transformOrigin="left top";
-
-    // Mask: p=0.7'ye kadar tamamen gevşer
-    var maskP=Math.min(p/0.7,1);
-    var baseAlpha=direction==="up"?MASK_ALPHA_BELOW:MASK_ALPHA_ABOVE;
-    var alpha=baseAlpha+maskP*(1-baseAlpha);
-    var startPct=10+maskP*90;
-    var dir=direction==="up"?"bottom":"top";
-    var grad="linear-gradient(to "+dir+", rgba(0,0,0,"+alpha+") "+startPct+"%, transparent 100%)";
-    el.style.maskImage=grad;
-    el.style.webkitMaskImage=grad;
-
-    // Opacity: p=0.75'e kadar tam, sonra fade-out
-    var fadeP=Math.max(0,(p-0.75)/0.25);
-    el.style.opacity=String(1-fadeP);
-  }
-
-  function animateEnd(el){
-    el.style.transform="none";
-    el.style.zIndex="";
-    el.style.transition="opacity .3s";
-    // mask temizlenMEZ — Peek.update() zaten doğru mask'i uyguluyor
-    // burada temizlersek revertView sonrası flash olur
-  }
-
-  return {update:update,position:position,hide:hide,syncScroll:syncScroll,bounce:peekBounce,
-          animateStart:animateStart,animateProgress:animateProgress,animateEnd:animateEnd,
-          SCALE:SCALE,SCALE_H:SCALE_H};
+  return {
+    populate:populate,
+    syncScroll:syncScroll,
+    bounce:bounce,
+    position:position,
+    renderActiveRow:renderActiveRow,
+    SCALE:SCALE,
+    PASSIVE_ROW_H:PASSIVE_ROW_H,
+    ROW_GAP:ROW_GAP
+  };
 })();
 
 
@@ -833,10 +887,10 @@ var TodoManager={
     var color=Config.pickColor(list.map(function(t){return t.color.bg;}));
 
     UI.removeEmptyState();
-    DOM.scrollContainer.scrollLeft=0;Peek.syncScroll(0);
+    DOM.row2Scroll.scrollLeft=0;RowManager.syncScroll(0);
 
     var el=CardFactory.blank(color,pullWidth);
-    DOM.track.insertBefore(el,DOM.track.firstChild);
+    DOM.row2Track.insertBefore(el,DOM.row2Track.firstChild);
     UI.updateSubtitle();
   },
 
@@ -899,121 +953,76 @@ var TodoManager={
 
 
 /* ═══════════════════════════════════════════
-   NAVIGATION — Category↔Task view transitions (crossfade, swipe)
+   NAVIGATION — Category↔Task view transitions (3-satır kayma)
    ═══════════════════════════════════════════ */
 var Navigation=(function(){
   var currentAnim=null;
-  var snapshotEl=null;
-  var viewReady=true;
-  var swipeGen=0;
-  var activePeekEl=null;
+  var transitioning=false;
   var EASE="cubic-bezier(.25,1,.5,1)";
+  var TRANSITION_DUR=300;
 
-  // ── Tek temizlik noktası — cancel() ile stale callback imkansız ──
+  var swipeTargetCategory=null;
+  var savedLastCategory=null;
+  var savedCategoryScroll=0;
+  var swipeGen=0;
+  var viewReady=true;
+
   function cleanup(){
     if(currentAnim){
       currentAnim.forEach(function(a){try{a.cancel();}catch(e){}});
       currentAnim=null;
     }
-    if(snapshotEl){snapshotEl.remove();snapshotEl=null;}
-    if(activePeekEl){Peek.animateEnd(activePeekEl);activePeekEl=null;}
     DOM.contentBlock.style.opacity="1";
     DOM.contentBlock.style.transform="none";
+    transitioning=false;
     viewReady=true;
-  }
-
-  // ── Snapshot: hafif klon ──
-  function createSnapshot(){
-    if(snapshotEl)snapshotEl.remove();
-    var clone=DOM.contentBlock.cloneNode(true);
-    clone.style.pointerEvents="none";
-    clone.style.zIndex="10";
-    clone.style.willChange="opacity,transform";
-    DOM.appContainer.appendChild(clone);
-    snapshotEl=clone;
   }
 
   function updateHeader(){
     DOM.viewTitle.textContent=State.view==="categories"?"Kategoriler":State.currentCategory.text;
   }
 
-  var swipeTargetCategory=null;
-  var savedLastCategory=null;
-  var savedCategoryScroll=0;
-
-  function swapView(direction){
-    if(direction==="down"){
-      State.view="categories";State.currentCategory=null;
-      updateHeader();
-      UI.renderAll();
-      DOM.scrollContainer.scrollLeft=savedCategoryScroll;
-      Peek.syncScroll(savedCategoryScroll);
-    }else{
-      savedCategoryScroll=DOM.scrollContainer.scrollLeft;
-      var cat=swipeTargetCategory||State.lastCategory;
-      State.view="tasks";State.currentCategory=cat;State.lastCategory=cat;
-      updateHeader();
-      UI.renderAll();
-    }
-  }
-
-  function revertView(direction){
-    if(direction==="down"){
-      State.view="tasks";State.currentCategory=State.lastCategory;
-      updateHeader();
-      UI.renderAll();
-    }else{
-      State.view="categories";State.currentCategory=null;
-      if(savedLastCategory!==undefined)State.lastCategory=savedLastCategory;
-      updateHeader();
-      UI.renderAll();
-      DOM.scrollContainer.scrollLeft=savedCategoryScroll;
-      Peek.syncScroll(savedCategoryScroll);
-    }
-  }
-
-  // ── Tap ile crossfade (WAAPI — compositor thread) ──
-  function crossfade(direction,prepareState){
+  // ── Tap ile geçiş: crossfade + slide ──
+  function animateTransition(direction,prepareState){
+    if(transitioning)return;
+    transitioning=true;
     cleanup();
-    activePeekEl=Peek.animateStart(direction);
+
     var sign=direction==="down"?1:-1;
 
-    createSnapshot();
+    // Snapshot oluştur (mevcut görünümün klonu)
+    var snapshot=DOM.contentBlock.cloneNode(true);
+    snapshot.style.pointerEvents="none";
+    snapshot.style.zIndex="10";
+    snapshot.style.willChange="opacity,transform";
+    DOM.appContainer.appendChild(snapshot);
+
+    // State'i güncelle ve yeni içeriği render et
     prepareState();
 
-    var sA=snapshotEl.animate([
+    // Eski içerik: slide out + fade out
+    var sA=snapshot.animate([
       {opacity:1,transform:"translate3d(0,0,0)"},
-      {opacity:0,transform:"translate3d(0,"+(sign*25)+"px,0)"}
-    ],{duration:250,easing:EASE,fill:"forwards"});
+      {opacity:0,transform:"translate3d(0,"+(sign*30)+"px,0)"}
+    ],{duration:TRANSITION_DUR,easing:EASE,fill:"forwards"});
 
+    // Yeni içerik: slide in + fade in
     var bA=DOM.contentBlock.animate([
-      {opacity:0,transform:"translate3d(0,"+(-sign*8)+"px,0)"},
+      {opacity:0,transform:"translate3d(0,"+(-sign*12)+"px,0)"},
       {opacity:1,transform:"translate3d(0,0,0)"}
-    ],{duration:250,easing:EASE,fill:"forwards"});
+    ],{duration:TRANSITION_DUR,easing:EASE,fill:"forwards"});
 
     currentAnim=[sA,bA];
-
-    // Peek morph: tap — offset keyframe ile fazlı
-    if(activePeekEl){
-      var peekTop=parseFloat(activePeekEl.style.top);
-      var targetY=parseFloat(DOM.contentBlock.style.top)+52-peekTop;
-      var midSx=Peek.SCALE+0.75*(1-Peek.SCALE);
-      var midSy=Peek.SCALE_H+0.75*(1-Peek.SCALE_H);
-      var pA=activePeekEl.animate([
-        {offset:0,transform:"translateY(0) scale("+Peek.SCALE+","+Peek.SCALE_H+")",opacity:1},
-        {offset:0.75,transform:"translateY("+(targetY*0.75)+"px) scale("+midSx+","+midSy+")",opacity:1},
-        {offset:1,transform:"translateY("+targetY+"px) scale(1)",opacity:0}
-      ],{duration:250,easing:EASE,fill:"forwards"});
-      currentAnim.push(pA);
-    }
-
-    sA.onfinish=function(){cleanup();};
+    sA.onfinish=function(){
+      snapshot.remove();
+      cleanup();
+    };
   }
 
   // ── Progressive swipe ──
   function startSwipe(direction,targetCategory){
     cleanup();
-    activePeekEl=Peek.animateStart(direction);
+    transitioning=true;
     savedLastCategory=State.lastCategory;
     swipeTargetCategory=targetCategory||null;
     swipeGen++;
@@ -1021,49 +1030,69 @@ var Navigation=(function(){
     viewReady=false;
     var sign=direction==="down"?1:-1;
 
-    createSnapshot();
+    // Snapshot oluştur
+    var snapshot=DOM.contentBlock.cloneNode(true);
+    snapshot.style.pointerEvents="none";
+    snapshot.style.zIndex="10";
+    snapshot.style.willChange="opacity,transform";
+    DOM.appContainer.appendChild(snapshot);
+    startSwipe._snapshot=snapshot;
+
+    // Yeni içeriği hazırla (gizli)
     DOM.contentBlock.style.opacity="0";
-    DOM.contentBlock.style.transform="translate3d(0,"+(-sign*8)+"px,0)";
+    DOM.contentBlock.style.transform="translate3d(0,"+(-sign*12)+"px,0)";
 
     requestAnimationFrame(function(){
       if(swipeGen!==myGen)return;
-      swapView(direction);
+      // State'i güncelle
+      if(direction==="down"){
+        State.view="categories";State.currentCategory=null;
+        updateHeader();
+        UI.renderAll();
+        DOM.row2Scroll.scrollLeft=savedCategoryScroll;
+        RowManager.syncScroll(savedCategoryScroll);
+      }else{
+        savedCategoryScroll=DOM.row2Scroll.scrollLeft;
+        var cat=swipeTargetCategory||State.lastCategory;
+        State.view="tasks";State.currentCategory=cat;State.lastCategory=cat;
+        updateHeader();
+        UI.renderAll();
+      }
       viewReady=true;
     });
   }
 
   function updateSwipe(progress,direction){
-    if(!snapshotEl)return;
+    var snapshot=startSwipe._snapshot;
+    if(!snapshot)return;
     var p=Math.min(progress,1);
     var sign=direction==="down"?1:-1;
 
-    // Snapshot: hızlı çıkar (p=0.7'de tamamen kaybolur)
+    // Snapshot: fade out + slide
     var snapP=Math.min(p/0.7,1);
-    snapshotEl.style.opacity=String(1-snapP);
-    snapshotEl.style.transform="translate3d(0,"+(sign*snapP*25)+"px,0)";
+    snapshot.style.opacity=String(1-snapP);
+    snapshot.style.transform="translate3d(0,"+(sign*snapP*30)+"px,0)";
 
-    // Content: p=0.10'dan başlar, gecikmeli girer
+    // Content: gecikmeli giriş
     if(viewReady){
       var contentP=Math.max(0,Math.min((p-0.10)/0.90,1));
       DOM.contentBlock.style.opacity=String(contentP);
-      DOM.contentBlock.style.transform="translate3d(0,"+(-sign*(1-contentP)*8)+"px,0)";
+      DOM.contentBlock.style.transform="translate3d(0,"+(-sign*(1-contentP)*12)+"px,0)";
     }
-
-    // Peek morph (fazlı opacity kendi içinde yönetiliyor)
-    if(activePeekEl)Peek.animateProgress(activePeekEl,p,direction);
   }
 
   function endSwipe(commit,direction){
-    if(!snapshotEl){cleanup();return;}
+    var snapshot=startSwipe._snapshot;
+    if(!snapshot){cleanup();return;}
     var sign=direction==="down"?1:-1;
     var b=DOM.contentBlock;
-    var sOp=snapshotEl.style.opacity||"1";
-    var sTr=snapshotEl.style.transform||"none";
+    var sOp=snapshot.style.opacity||"1";
+    var sTr=snapshot.style.transform||"none";
     var bOp=b.style.opacity||"0";
     var bTr=b.style.transform||"none";
 
     if(commit){
-      var sA=snapshotEl.animate([
+      var sA=snapshot.animate([
         {opacity:sOp,transform:sTr},
         {opacity:0,transform:"translate3d(0,"+(sign*30)+"px,0)"}
       ],{duration:150,easing:EASE,fill:"forwards"});
@@ -1073,51 +1102,60 @@ var Navigation=(function(){
         {opacity:1,transform:"translate3d(0,0,0)"}
       ],{duration:150,easing:EASE,fill:"forwards"});
 
-      // Peek morph tamamlama animasyonu
-      if(activePeekEl){
-        var curOp=activePeekEl.style.opacity||"1";
-        var pA=activePeekEl.animate([
-          {transform:activePeekEl.style.transform||"none",opacity:curOp},
-          {transform:"none",opacity:"0"}
-        ],{duration:150,easing:EASE,fill:"forwards"});
-        currentAnim=[sA,bA,pA];
-      }else{
-        currentAnim=[sA,bA];
-      }
-      sA.onfinish=function(){cleanup();};
+      currentAnim=[sA,bA];
+      sA.onfinish=function(){
+        snapshot.remove();
+        startSwipe._snapshot=null;
+        cleanup();
+      };
     }else{
-      var sA=snapshotEl.animate([
+      // İptal: eski görünüme geri dön
+      var sA=snapshot.animate([
         {opacity:sOp,transform:sTr},
         {opacity:1,transform:"translate3d(0,0,0)"}
       ],{duration:180,easing:EASE,fill:"forwards"});
 
       var bA=b.animate([
         {opacity:bOp,transform:bTr},
-        {opacity:0,transform:"translate3d(0,"+(-sign*8)+"px,0)"}
+        {opacity:0,transform:"translate3d(0,"+(-sign*12)+"px,0)"}
       ],{duration:180,easing:EASE,fill:"forwards"});
 
       currentAnim=[sA,bA];
-
-      // Peek reverse morph (cancel)
-      if(activePeekEl){
-        var pA=activePeekEl.animate([
-          {transform:activePeekEl.style.transform||"none",opacity:activePeekEl.style.opacity||"1"},
-          {transform:"none",opacity:"1"}
-        ],{duration:180,easing:EASE,fill:"forwards"});
-        currentAnim.push(pA);
-      }
-
       bA.onfinish=function(){
-        revertView(direction);
+        // Eski state'e geri dön
+        if(direction==="down"){
+          State.view="tasks";State.currentCategory=State.lastCategory;
+          updateHeader();
+          UI.renderAll();
+        }else{
+          State.view="categories";State.currentCategory=null;
+          if(savedLastCategory!==undefined)State.lastCategory=savedLastCategory;
+          updateHeader();
+          UI.renderAll();
+          DOM.row2Scroll.scrollLeft=savedCategoryScroll;
+          RowManager.syncScroll(savedCategoryScroll);
+        }
+        snapshot.remove();
+        startSwipe._snapshot=null;
         cleanup();
       };
     }
   }
 
+  // ── Geçersiz swipe: yay bounce ──
+  function bounceInvalid(direction){
+    var sign=direction==="up"?-1:1;
+    DOM.rowContainer.animate([
+      {transform:"translateY(0)"},
+      {transform:"translateY("+(sign*15)+"px)"},
+      {transform:"translateY(0)"}
+    ],{duration:400,easing:"cubic-bezier(.25,1.05,.5,.98)"});
+  }
+
   return {
     goToTasks:function(cat){
-      crossfade("up",function(){
-        savedCategoryScroll=DOM.scrollContainer.scrollLeft;
+      animateTransition("up",function(){
+        savedCategoryScroll=DOM.row2Scroll.scrollLeft;
         State.view="tasks";
         State.currentCategory=cat;
         State.lastCategory=cat;
@@ -1126,20 +1164,21 @@ var Navigation=(function(){
       });
     },
     goToCategories:function(){
-      crossfade("down",function(){
+      animateTransition("down",function(){
         State.view="categories";
         State.currentCategory=null;
         updateHeader();
         UI.renderAll();
-        DOM.scrollContainer.scrollLeft=savedCategoryScroll;
-        Peek.syncScroll(savedCategoryScroll);
+        DOM.row2Scroll.scrollLeft=savedCategoryScroll;
+        RowManager.syncScroll(savedCategoryScroll);
       });
     },
     startSwipe:startSwipe,
     updateSwipe:updateSwipe,
     endSwipe:endSwipe,
+    bounceInvalid:bounceInvalid,
     cleanup:cleanup,
-    isTransitioning:function(){return currentAnim!==null;}
+    isTransitioning:function(){return transitioning;}
   };
 })();
 
@@ -1191,11 +1230,11 @@ var Gestures=(function(){
   }
 
   function resetVisuals(){
-    var cur=DOM.track.style.transform;
+    var cur=DOM.row2Track.style.transform;
     DOM.track.style.transition="none";
-    DOM.track.style.transform="";
+    DOM.row2Track.style.transform="";
     if(cur&&cur!=="none"){
-      DOM.track.animate([
+      DOM.row2Track.animate([
         {transform:cur},{transform:"translateX(0)"}
       ],{duration:300,easing:"cubic-bezier(.25,1,.5,1)"});
     }
@@ -1220,7 +1259,7 @@ var Gestures=(function(){
 
   function applyPull(dx){
     g.pullVal=dampedPull(Math.max(0,dx));
-    DOM.track.style.transform="translateX("+g.pullVal+"px)";
+    DOM.row2Track.style.transform="translateX("+g.pullVal+"px)";
     DOM.track.style.transition="none";
     updateIndicator(g.pullVal);
   }
@@ -1243,17 +1282,17 @@ var Gestures=(function(){
   // ── Momentum: rAF tabanlı, frame-rate bağımsız ──
   function cancelBounce(){
     if(bounceAnim){try{bounceAnim.cancel();}catch(e){}bounceAnim=null;}
-    DOM.track.style.transform="";
+    DOM.row2Track.style.transform="";
   }
 
   function bounce(overscrollPx){
     cancelBounce();
-    bounceAnim=DOM.track.animate([
+    bounceAnim=DOM.row2Track.animate([
       {transform:"translateX("+overscrollPx+"px)"},
       {transform:"translateX(0)"}
     ],{duration:480,easing:"cubic-bezier(.25,1.05,.5,.98)"});
     bounceAnim.onfinish=function(){bounceAnim=null;};
-    Peek.bounce(overscrollPx);
+    RowManager.bounce(overscrollPx);
   }
 
   function cancelMomentum(){
@@ -1264,7 +1303,7 @@ var Gestures=(function(){
 
   function startMomentum(vel){
     cancelMomentum();
-    var sc=DOM.scrollContainer;
+    var sc=DOM.row2Scroll;
     var lastT=performance.now();
     function step(now){
       var dt=now-lastT;lastT=now;
@@ -1279,7 +1318,7 @@ var Gestures=(function(){
       }
 
       if(Math.abs(vel)<Config.MOMENTUM_MIN){momentumRAF=null;return;}
-      sc.scrollLeft-=vel;Peek.syncScroll(sc.scrollLeft);
+      sc.scrollLeft-=vel;RowManager.syncScroll(sc.scrollLeft);
       if((sc.scrollLeft<=0&&vel>0)||(sc.scrollLeft>=maxSc&&vel<0)){
         momentumRAF=null;
         var over=vel*6;
@@ -1325,7 +1364,7 @@ var Gestures=(function(){
   // ── INIT: unified touch+mouse handler setup ──
   function init(){
     var appContainer=DOM.appContainer;
-    var scrollEl=DOM.scrollContainer;
+    var scrollEl=DOM.row2Scroll;
     var velocity=createVelocityTracker();
 
     // ── Helper: capture horizontal swipe from blank card input ──
@@ -1376,7 +1415,7 @@ var Gestures=(function(){
         if(!g.axis){
           e.preventDefault();
           velocity.add(t.clientX);
-          scrollEl.scrollLeft-=(t.clientX-g.lastX);Peek.syncScroll(scrollEl.scrollLeft);
+          scrollEl.scrollLeft-=(t.clientX-g.lastX);RowManager.syncScroll(scrollEl.scrollLeft);
           g.lastX=t.clientX;
           return;
         }
@@ -1396,15 +1435,15 @@ var Gestures=(function(){
           applyPull(dx);
         }else{
           var before=scrollEl.scrollLeft;
-          scrollEl.scrollLeft-=frameDx;Peek.syncScroll(scrollEl.scrollLeft);
+          scrollEl.scrollLeft-=frameDx;RowManager.syncScroll(scrollEl.scrollLeft);
           var clamped=scrollEl.scrollLeft===before&&frameDx!==0;
           if(clamped){
             g.overscroll=(g.overscroll||0)+frameDx*0.5;
             g.overscroll=Math.sign(g.overscroll)*Math.min(Math.abs(g.overscroll),50);
-            DOM.track.style.transform="translateX("+g.overscroll+"px)";
+            DOM.row2Track.style.transform="translateX("+g.overscroll+"px)";
           }else if(g.overscroll){
             g.overscroll=0;
-            DOM.track.style.transform="";
+            DOM.row2Track.style.transform="";
           }
         }
         return;
@@ -1429,10 +1468,16 @@ var Gestures=(function(){
           var cat=State.categories[catIdx];
           if(cat){canSwipe=true;swipeCat=cat;}
         }
-        if(canSwipe){g.swiping=true;g.direction=dir;Navigation.startSwipe(dir,swipeCat);}
+        if(canSwipe){
+          g.swiping=true;g.direction=dir;Navigation.startSwipe(dir,swipeCat);
+        }else{
+          // Geçersiz yönde swipe: bounce efekti
+          g.swiping=true;g.direction=dir;g.invalidSwipe=true;
+          Navigation.bounceInvalid(dir);
+        }
       }
 
-      if(g.swiping){
+      if(g.swiping&&!g.invalidSwipe){
         var progress=Math.min(Math.abs(dy)/200,1);
         Navigation.updateSwipe(progress,g.direction);
       }
@@ -1512,15 +1557,15 @@ var Gestures=(function(){
       if(g.pulling){applyPull(dx);}
       else{
         var before=scrollEl.scrollLeft;
-        scrollEl.scrollLeft-=frameDx;Peek.syncScroll(scrollEl.scrollLeft);
+        scrollEl.scrollLeft-=frameDx;RowManager.syncScroll(scrollEl.scrollLeft);
         var clamped=scrollEl.scrollLeft===before&&frameDx!==0;
         if(clamped){
           g.overscroll=(g.overscroll||0)+frameDx*0.5;
           g.overscroll=Math.sign(g.overscroll)*Math.min(Math.abs(g.overscroll),80);
-          DOM.track.style.transform="translateX("+g.overscroll+"px)";
+          DOM.row2Track.style.transform="translateX("+g.overscroll+"px)";
         }else if(g.overscroll){
           g.overscroll=0;
-          DOM.track.style.transform="";
+          DOM.row2Track.style.transform="";
         }
       }
     });
