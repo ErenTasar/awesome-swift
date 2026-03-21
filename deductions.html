@@ -82,10 +82,21 @@ var State={
   currentCategory:null,
   lastCategory:null,
   categories:[
-    {id:1,text:"İş",color:Config.COLORS[0],todos:[],nextTodoId:1},
-    {id:2,text:"Kişisel",color:Config.COLORS[1],todos:[],nextTodoId:1},
+    {id:1,text:"İş",color:Config.COLORS[0],todos:[
+      {id:1,text:"Rapor hazırla",color:Config.COLORS[2]},
+      {id:2,text:"Toplantı notları",color:Config.COLORS[3]},
+      {id:3,text:"E-posta yanıtla",color:Config.COLORS[4]},
+    ],nextTodoId:4},
+    {id:2,text:"Kişisel",color:Config.COLORS[1],todos:[
+      {id:1,text:"Market alışverişi",color:Config.COLORS[5]},
+      {id:2,text:"Spor salonu",color:Config.COLORS[6]},
+    ],nextTodoId:3},
+    {id:3,text:"Projeler",color:Config.COLORS[4],todos:[
+      {id:1,text:"UI tasarımı",color:Config.COLORS[0]},
+      {id:2,text:"API entegrasyonu",color:Config.COLORS[7]},
+    ],nextTodoId:3},
   ],
-  nextCategoryId:3,
+  nextCategoryId:4,
   adding:false,
   addingLock:false,
 
@@ -215,6 +226,18 @@ var CardFactory=(function(){
     return btn;
   }
 
+  function editButton(onClick){
+    var btn=document.createElement("button");
+    Object.assign(btn.style,{
+      width:"26px",height:"26px",borderRadius:"50%",border:"2px solid rgba(255,255,255,.28)",
+      background:"rgba(255,255,255,.08)",display:"flex",alignItems:"center",justifyContent:"center",
+      cursor:"pointer",padding:"0",transition:"background .15s,border-color .15s",
+    });
+    btn.innerHTML='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>';
+    btn.addEventListener("click",function(e){e.stopPropagation();onClick();});
+    return btn;
+  }
+
   function textLabel(text,onEdit){
     var div=document.createElement("div");
     Object.assign(div.style,{
@@ -266,7 +289,7 @@ var CardFactory=(function(){
     var btnRow=document.createElement("div");
     Object.assign(btnRow.style,{display:"flex",justifyContent:"flex-end"});
     if(isCategory){
-      btnRow.appendChild(checkButton(function(){Editing.start(content,txtDiv,item,true);}));
+      btnRow.appendChild(editButton(function(){Editing.start(content,txtDiv,item,true);}));
     }else{
       btnRow.appendChild(checkButton(function(){if(opts.onCheck)opts.onCheck();}));
     }
@@ -385,7 +408,7 @@ var CardFactory=(function(){
     var btnRow=document.createElement("div");
     Object.assign(btnRow.style,{display:"flex",justifyContent:"flex-end"});
     if(isCategory){
-      btnRow.appendChild(checkButton(function(){Editing.start(content,txtDiv,item,true);}));
+      btnRow.appendChild(editButton(function(){Editing.start(content,txtDiv,item,true);}));
     }else{
       btnRow.appendChild(checkButton(function(){if(opts.onCheck)opts.onCheck();}));
     }
@@ -649,32 +672,27 @@ var TodoManager={
    ═══════════════════════════════════════════ */
 var Navigation=(function(){
   var transitioning=false;
+  var snapshotEl=null;
+  var ease="cubic-bezier(.25,1,.5,1)";
 
-  // Tap ile geçiş (kategori kartına tıklama)
-  function transition(direction,callback){
-    if(transitioning)return;
-    transitioning=true;
-    var block=DOM.contentBlock;
-    var outY=direction==="down"?"30px":"-30px";
-    var inY=direction==="down"?"-30px":"30px";
+  // ── Snapshot: mevcut view'ın görsel klonu ──
+  function createSnapshot(){
+    var origSL=DOM.scrollContainer.scrollLeft;
+    var clone=DOM.contentBlock.cloneNode(true);
+    // Scroll pozisyonunu koru
+    var cloneSc=clone.querySelector("#scrollContainer");
+    if(cloneSc)cloneSc.scrollLeft=origSL;
+    // Duplicate ID'leri temizle
+    clone.querySelectorAll("[id]").forEach(function(el){el.removeAttribute("id");});
+    clone.style.pointerEvents="none";
+    clone.style.zIndex="10";
+    DOM.appContainer.appendChild(clone);
+    snapshotEl=clone;
+    return clone;
+  }
 
-    block.style.transition="opacity .2s ease, transform .2s ease";
-    block.style.opacity="0";
-    block.style.transform="translateY("+outY+")";
-
-    setTimeout(function(){
-      callback();
-      block.style.transition="none";
-      block.style.transform="translateY("+inY+")";
-      requestAnimationFrame(function(){
-        requestAnimationFrame(function(){
-          block.style.transition="opacity .25s ease, transform .25s cubic-bezier(.25,1,.5,1)";
-          block.style.opacity="1";
-          block.style.transform="translateY(0)";
-          setTimeout(function(){transitioning=false;},260);
-        });
-      });
-    },220);
+  function removeSnapshot(){
+    if(snapshotEl){snapshotEl.remove();snapshotEl=null;}
   }
 
   function updateHeader(){
@@ -693,53 +711,142 @@ var Navigation=(function(){
     UI.renderAll();
   }
 
-  // Progressive swipe: parmak takibi
-  function updateSwipe(progress,direction){
+  function revertView(direction){
+    if(direction==="down"){
+      // tasks→categories gidiyordu, geri: tasks'e dön
+      State.view="tasks";
+      State.currentCategory=State.lastCategory;
+    }else{
+      // categories→tasks gidiyordu, geri: categories'e dön
+      State.view="categories";
+      State.currentCategory=null;
+    }
+    updateHeader();
+    UI.renderAll();
+  }
+
+  // ── Tap ile crossfade geçiş ──
+  function crossfade(direction,prepareState){
     if(transitioning)return;
-    var p=Math.min(progress,1);
-    var dy=direction==="down"?p*25:-p*25;
+    transitioning=true;
+    var sign=direction==="down"?1:-1;
+    var block=DOM.contentBlock;
+
+    // 1. Snapshot (eski view)
+    createSnapshot();
+
+    // 2. State swap + re-render (contentBlock = yeni view)
+    prepareState();
+
+    // 3. Yeni view: başlangıç pozisyonu
+    block.style.transition="none";
+    block.style.opacity="0";
+    block.style.transform="translateY("+(-sign*20)+"px)";
+
+    // 4. Eşzamanlı crossfade
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        // Eski view (snapshot) fade-out
+        snapshotEl.style.transition="opacity .28s ease, transform .28s "+ease;
+        snapshotEl.style.opacity="0";
+        snapshotEl.style.transform="translateY("+(sign*25)+"px)";
+
+        // Yeni view fade-in
+        block.style.transition="opacity .28s ease, transform .28s "+ease;
+        block.style.opacity="1";
+        block.style.transform="translateY(0)";
+
+        setTimeout(function(){
+          removeSnapshot();
+          transitioning=false;
+        },300);
+      });
+    });
+  }
+
+  // ── Progressive swipe ──
+  function startSwipe(direction){
+    if(transitioning)return;
+    var sign=direction==="down"?1:-1;
+
+    // Snapshot oluştur (eski view)
+    createSnapshot();
+    snapshotEl.style.transition="none";
+
+    // State swap + re-render (contentBlock = yeni view)
+    swapView(direction);
+
+    // Yeni view gizli başlar
     DOM.contentBlock.style.transition="none";
-    DOM.contentBlock.style.opacity=String(1-p*0.85);
-    DOM.contentBlock.style.transform="translateY("+dy+"px)";
+    DOM.contentBlock.style.opacity="0";
+    DOM.contentBlock.style.transform="translateY("+(-sign*20)+"px)";
+  }
+
+  function updateSwipe(progress,direction){
+    if(!snapshotEl)return;
+    var p=Math.min(progress,1);
+    var sign=direction==="down"?1:-1;
+
+    // Eski view (snapshot): soluklaş + kay
+    snapshotEl.style.transition="none";
+    snapshotEl.style.opacity=String(1-p);
+    snapshotEl.style.transform="translateY("+(sign*p*25)+"px)";
+
+    // Yeni view (contentBlock): belirginleş + yaklaş
+    DOM.contentBlock.style.transition="none";
+    DOM.contentBlock.style.opacity=String(p);
+    DOM.contentBlock.style.transform="translateY("+(-sign*(1-p)*20)+"px)";
   }
 
   function endSwipe(commit,direction){
-    if(transitioning)return;
+    if(!snapshotEl){
+      // snapshot yoksa (startSwipe çağrılmamış) ignore
+      return;
+    }
+    var sign=direction==="down"?1:-1;
+    var block=DOM.contentBlock;
+
     if(commit){
       transitioning=true;
-      var outY=direction==="down"?"30px":"-30px";
-      var inY=direction==="down"?"-30px":"30px";
+      // Crossfade'i tamamla
+      snapshotEl.style.transition="opacity .18s ease, transform .18s "+ease;
+      snapshotEl.style.opacity="0";
+      snapshotEl.style.transform="translateY("+(sign*30)+"px)";
 
-      // Hızlı fade-out tamamla (mevcut progress'ten devam)
-      DOM.contentBlock.style.transition="opacity .12s ease, transform .12s ease";
-      DOM.contentBlock.style.opacity="0";
-      DOM.contentBlock.style.transform="translateY("+outY+")";
+      block.style.transition="opacity .18s ease, transform .18s "+ease;
+      block.style.opacity="1";
+      block.style.transform="translateY(0)";
 
       setTimeout(function(){
-        swapView(direction);
-        // Yeni view fade-in
-        DOM.contentBlock.style.transition="none";
-        DOM.contentBlock.style.transform="translateY("+inY+")";
-        requestAnimationFrame(function(){
-          requestAnimationFrame(function(){
-            DOM.contentBlock.style.transition="opacity .22s ease, transform .22s cubic-bezier(.25,1,.5,1)";
-            DOM.contentBlock.style.opacity="1";
-            DOM.contentBlock.style.transform="translateY(0)";
-            setTimeout(function(){transitioning=false;},240);
-          });
-        });
-      },130);
+        removeSnapshot();
+        transitioning=false;
+      },200);
     }else{
-      // Geri dön (spring back)
-      DOM.contentBlock.style.transition="opacity .22s ease, transform .22s cubic-bezier(.25,1,.5,1)";
-      DOM.contentBlock.style.opacity="1";
-      DOM.contentBlock.style.transform="translateY(0)";
+      // Geri al: eski view'a dön
+      transitioning=true;
+      snapshotEl.style.transition="opacity .22s ease, transform .22s "+ease;
+      snapshotEl.style.opacity="1";
+      snapshotEl.style.transform="translateY(0)";
+
+      block.style.transition="opacity .22s ease, transform .22s "+ease;
+      block.style.opacity="0";
+      block.style.transform="translateY("+(-sign*20)+"px)";
+
+      setTimeout(function(){
+        // State'i eski haline döndür
+        revertView(direction);
+        block.style.transition="none";
+        block.style.opacity="1";
+        block.style.transform="translateY(0)";
+        removeSnapshot();
+        transitioning=false;
+      },240);
     }
   }
 
   return {
     goToTasks:function(cat){
-      transition("up",function(){
+      crossfade("up",function(){
         State.view="tasks";
         State.currentCategory=cat;
         State.lastCategory=cat;
@@ -748,13 +855,14 @@ var Navigation=(function(){
       });
     },
     goToCategories:function(){
-      transition("down",function(){
+      crossfade("down",function(){
         State.view="categories";
         State.currentCategory=null;
         updateHeader();
         UI.renderAll();
       });
     },
+    startSwipe:startSwipe,
     updateSwipe:updateSwipe,
     endSwipe:endSwipe,
     isTransitioning:function(){return transitioning;}
@@ -908,7 +1016,7 @@ var Gestures=(function(){
         var dir=dy>0?"down":"up";
         var canSwipe=(dir==="down"&&State.view==="tasks")||
                      (dir==="up"&&State.view==="categories"&&State.lastCategory);
-        if(canSwipe){vg.swiping=true;vg.direction=dir;}
+        if(canSwipe){vg.swiping=true;vg.direction=dir;Navigation.startSwipe(dir);}
       }
 
       // Progressive transition güncelle
