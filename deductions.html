@@ -42,19 +42,37 @@ input::placeholder{color:rgba(255,255,255,.3)}
 
 <script>
 (function(){
-// --- Layout stabilizasyonu: klavye açılınca container yüksekliği değişmesin ---
+// --- Layout stabilizasyonu: Safari klavye açılınca sayfayı scroll etmesin ---
 var appContainer=document.getElementById("appContainer");
 var initialHeight=window.innerHeight;
 appContainer.style.height=initialHeight+"px";
+
+// Safari sayfayı yukarı kaydırdığında, visualViewport.offsetTop artar.
+// Bunu container'ı aşağı kaydırarak telafi ediyoruz.
+function compensateScroll(){
+if(window.visualViewport){
+var offset=window.visualViewport.offsetTop;
+appContainer.style.transform="translateY("+offset+"px)";
+}
+window.scrollTo(0,0);
+document.documentElement.scrollTop=0;
+document.body.scrollTop=0;
+}
+
 if(window.visualViewport){
 window.visualViewport.addEventListener("resize",function(){
 appContainer.style.height=initialHeight+"px";
-appContainer.style.transform="translateY(0)";
+compensateScroll();
 });
 window.visualViewport.addEventListener("scroll",function(){
-appContainer.style.transform="translateY(0)";
+compensateScroll();
 });
 }
+// Fallback: window scroll'u da engelle
+window.addEventListener("scroll",function(){
+window.scrollTo(0,0);
+compensateScroll();
+},{passive:false});
 
 // --- Proxy input: klavye açılması için user gesture zincirinde senkron focus ---
 var proxyInput=document.createElement("input");
@@ -212,8 +230,9 @@ if(e.key==="Escape"){committed=true;content.replaceChild(textDiv,input);}
 input.addEventListener("blur",function(){setTimeout(commit,150);});
 
 content.replaceChild(input,textDiv);
-input.focus();
+input.focus({preventScroll:true});
 input.setSelectionRange(0,input.value.length);
+window.scrollTo(0,0);
 }
 
 function startRemoveAnimation(wrapper,card,id){
@@ -321,7 +340,8 @@ wrapper.appendChild(content);
 
 // Focus transfer: proxy zaten klavyeyi açtı, şimdi gerçek input'a geç
 requestAnimationFrame(function(){
-input.focus();
+input.focus({preventScroll:true});
+window.scrollTo(0,0);
 });
 
 return wrapper;
@@ -352,7 +372,7 @@ if(todos.length===0)showEmptyState();
 function doAdd(){
 if(addingLock)return;
 // Senkron proxy focus — user gesture zincirinde klavyeyi aktifleştirir
-proxyInput.focus();
+proxyInput.focus({preventScroll:true});
 addingLock=true;adding=true;
 const usedColors=todos.map(t=>t.color.bg);
 newCol=rndColor(usedColors);
