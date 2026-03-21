@@ -254,17 +254,18 @@ window.scrollTo(0,0);
 }
 
 function startRemoveAnimation(wrapper,card,id){
-// Stage 1: fade out + shrink
+// Stage 1: fade out + shrink (double-rAF to avoid flicker)
+card.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
 requestAnimationFrame(function(){
-Object.assign(card.style,{
-opacity:"0",
-transform:"scale(.8) translateY(-6px)",
-transition:"opacity .28s ease, transform .28s cubic-bezier(.4,0,.2,1)",
+requestAnimationFrame(function(){
+card.style.opacity="0";
+card.style.transform="scale(.85) translateY(-6px)";
 });
 });
 
-// Stage 2: collapse width
+// Stage 2: collapse width with rounded corners
 setTimeout(function(){
+wrapper.style.borderRadius=R+"px";
 wrapper.style.transition="width .32s cubic-bezier(.4,0,.2,1)";
 wrapper.style.width="0px";
 wrapper.addEventListener("transitionend",function handler(e){
@@ -276,7 +277,7 @@ updateSubtitle();
 if(todos.length===0&&!adding)showEmptyState();
 }
 });
-},280);
+},300);
 }
 
 function showEmptyState(){
@@ -371,12 +372,43 @@ const todo={id:nextId++,text:text,color:color};
 todos.unshift(todo);
 adding=false;addingLock=false;newCol=null;
 
-// Remove new card
+// Remove new card instantly (will be replaced by animated real card)
 const nc=track.querySelector(".new-card");
 if(nc)nc.remove();
 
 removeEmptyState();
-renderAll();
+
+// Create the real card and animate it in
+const cardWrapper=createCardEl(todo);
+const innerCard=cardWrapper.firstElementChild;
+
+// Start collapsed + invisible
+cardWrapper.style.width="0px";
+cardWrapper.style.transition="width .3s cubic-bezier(.34,1.2,.64,1)";
+innerCard.style.opacity="0";
+innerCard.style.transform="scale(.7)";
+innerCard.style.transition="opacity .25s ease .08s, transform .25s cubic-bezier(.34,1.56,.64,1) .08s";
+
+// Insert at beginning of track
+track.insertBefore(cardWrapper,track.firstChild);
+
+// Ensure spacer exists at end
+var lastChild=track.lastElementChild;
+if(!lastChild||lastChild.style.width!=="20px"){
+var spacer=document.createElement("div");
+Object.assign(spacer.style,{width:"20px",flexShrink:"0"});
+track.appendChild(spacer);
+}
+
+// Animate in
+requestAnimationFrame(function(){
+requestAnimationFrame(function(){
+cardWrapper.style.width=SLOT+"px";
+innerCard.style.opacity="1";
+innerCard.style.transform="scale(1)";
+});
+});
+
 updateSubtitle();
 }
 
@@ -384,26 +416,23 @@ function cancelAdding(){
 adding=false;addingLock=false;newCol=null;
 const nc=track.querySelector(".new-card");
 if(!nc){updateSubtitle();if(todos.length===0)showEmptyState();return;}
-// Animate out like startRemoveAnimation: fade+scale on inner card, then collapse wrapper
-var card=nc; // nc is the wrapper which is also the visible card
+// Animate out: fade+scale then collapse with rounded corners
+nc.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
 requestAnimationFrame(function(){
-Object.assign(card.style,{
-opacity:"0",
-transform:"scale(.8) translateY(-6px)",
-transition:"opacity .28s ease, transform .28s cubic-bezier(.4,0,.2,1)",
+requestAnimationFrame(function(){
+nc.style.opacity="0";
+nc.style.transform="scale(.85) translateY(-6px)";
 });
 });
-// Stage 2: wrap in a collapsible container and shrink width
 setTimeout(function(){
-// Create a collapsible wrapper around nc
 var collapser=document.createElement("div");
 Object.assign(collapser.style,{
 width:(W+GAP)+"px",height:H+"px",overflow:"hidden",flexShrink:"0",
+borderRadius:R+"px",
 transition:"width .32s cubic-bezier(.4,0,.2,1)",
 });
 nc.parentNode.insertBefore(collapser,nc);
 collapser.appendChild(nc);
-// Force reflow
 collapser.offsetWidth;
 collapser.style.width="0px";
 collapser.addEventListener("transitionend",function handler(e){
@@ -414,7 +443,7 @@ updateSubtitle();
 if(todos.length===0&&!adding)showEmptyState();
 }
 });
-},280);
+},300);
 }
 
 function doAdd(){
