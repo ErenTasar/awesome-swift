@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Görevler</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;scrollbar-width:none}
+  *::-webkit-scrollbar{display:none}
+  html,body{overflow:hidden;position:fixed;width:100%;height:100%;background:#000;font-family:-apple-system,'SF Pro Rounded','SF Pro Display',BlinkMacSystemFont,sans-serif}
+  input::placeholder{color:rgba(255,255,255,.3)}
+  #root{position:fixed;inset:0}
+  @keyframes popIn{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useRef, useCallback, useEffect } = React;
+
+const COLORS = [
+{ bg:”#7C3AED”, accent:”#A78BFA” },
+{ bg:”#E84545”, accent:”#FF8A8A” },
+{ bg:”#0EA5E9”, accent:”#7DD3FC” },
+{ bg:”#CA8A04”, accent:”#FDE047” },
+{ bg:”#10B981”, accent:”#6EE7B7” },
+{ bg:”#E11D9E”, accent:”#F9A8D4” },
+{ bg:”#6366F1”, accent:”#A5B4FC” },
+{ bg:”#EA580C”, accent:”#FDBA74” },
+];
+const W=168, H=124, R=20, GAP=12, SLOT=W+GAP, TH=68, MAX_PULL=90;
+
+const rndColor=(used)=>{const a=COLORS.filter(c=>!used.includes(c.bg));const p=a.length?a:COLORS;return p[Math.floor(Math.random()*p.length)]};
+
+const Scratches=({a})=>(
+<svg style={{position:“absolute”,inset:0,width:“100%”,height:“100%”,opacity:.12,pointerEvents:“none”}} viewBox=“0 0 200 140” preserveAspectRatio=“none”>
+{[[15,8,185,132,2.8],[35,3,195,118,2],[8,35,165,137,2.4],[55,0,198,95,1.6],[3,60,145,138,2.2],[75,2,197,78,1.4]].map(([x1,y1,x2,y2,w],i)=>
+<line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={a} strokeWidth={w} strokeLinecap="round"/>
+)}
+</svg>
+);
+
+const textClamp={
+fontWeight:600,fontSize:15.5,color:”#fff”,lineHeight:1.22,letterSpacing:”-.01em”,
+display:”-webkit-box”,WebkitLineClamp:2,WebkitBoxOrient:“vertical”,
+overflow:“hidden”,textOverflow:“ellipsis”,wordBreak:“break-all”,
+};
+
+function Card({todo,onDone,onRename,removing}){
+const[stage,setStage]=useState(0);
+const[editing,setEditing]=useState(false);
+const editRef=useRef(null);
+
+useEffect(()=>{
+if(!removing)return;
+requestAnimationFrame(()=>setStage(1));
+const t=setTimeout(()=>setStage(2),280);
+return()=>clearTimeout(t);
+},[removing]);
+
+const onEnd=useCallback((e)=>{
+if(stage===2&&e.propertyName===“width”)onDone(todo.id,true);
+},[stage,onDone,todo.id]);
+
+useEffect(()=>{
+if(editing&&editRef.current){editRef.current.focus();editRef.current.setSelectionRange(0,editRef.current.value.length)}
+},[editing]);
+
+const commitEdit=useCallback(()=>{
+const v=(editRef.current?.value??””).trim();
+if(v&&v!==todo.text)onRename(todo.id,v);
+setEditing(false);
+},[todo.id,todo.text,onRename]);
+
+return(
+<div onTransitionEnd={onEnd} style={{
+width:stage===2?0:SLOT,overflow:“hidden”,flexShrink:0,
+transition:stage===2?“width .32s cubic-bezier(.4,0,.2,1)”:“none”,
+}}>
+<div style={{
+width:W,height:H,borderRadius:R,marginRight:GAP,
+background:todo.color.bg,position:“relative”,overflow:“hidden”,
+opacity:stage>=1?0:1,
+transform:stage===1?“scale(.8) translateY(-6px)”:“scale(1)”,
+transition:stage===1?“opacity .28s ease,transform .28s cubic-bezier(.4,0,.2,1)”:“none”,
+}}>
+<Scratches a={todo.color.accent}/>
+<div style={{position:“relative”,zIndex:1,padding:“12px 14px”,height:“100%”,display:“flex”,flexDirection:“column”,justifyContent:“space-between”}}>
+<div style={{display:“flex”,justifyContent:“flex-end”}}>
+<button onClick={e=>{e.stopPropagation();onDone(todo.id)}} style={{
+width:26,height:26,borderRadius:“50%”,border:“2px solid rgba(255,255,255,.28)”,
+background:“rgba(255,255,255,.08)”,display:“flex”,alignItems:“center”,justifyContent:“center”,
+cursor:“pointer”,padding:0,transition:“background .15s,border-color .15s”,
+}}>
+<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+</button>
+</div>
+{editing?(
+<input ref={editRef} type=“text” inputMode=“text” enterKeyHint=“done”
+autoComplete=“off” autoCorrect=“off” defaultValue={todo.text}
+onKeyDown={e=>{if(e.key===“Enter”){e.preventDefault();commitEdit()}if(e.key===“Escape”)setEditing(false)}}
+onBlur={()=>setTimeout(commitEdit,150)}
+style={{fontWeight:600,fontSize:16,color:”#fff”,lineHeight:1.22,letterSpacing:”-.01em”,
+background:“rgba(0,0,0,.15)”,border:“none”,borderRadius:6,outline:“none”,
+padding:“2px 4px”,margin:”-2px -4px”,width:“calc(100% + 8px)”,caretColor:”#fff”,fontFamily:“inherit”}}
+/>
+):(
+<div onClick={e=>{e.stopPropagation();setEditing(true)}} style={{…textClamp,cursor:“text”}}>
+{todo.text}
+</div>
+)}
+</div>
+</div>
+</div>
+);
+}
+
+function NewCard({color,onAdd,onCancel}){
+const inputRef=useRef(null);
+const submitted=useRef(false);
+
+useEffect(()=>{
+const el=inputRef.current;if(!el)return;
+el.focus();el.click();
+const attempts=[16,50,100,200,350,500].map(ms=>setTimeout(()=>{if(inputRef.current){inputRef.current.focus();inputRef.current.click()}},ms));
+return()=>attempts.forEach(clearTimeout);
+},[]);
+
+const submit=useCallback(()=>{
+if(submitted.current)return;submitted.current=true;
+const v=(inputRef.current?.value??””).trim();
+if(v)onAdd(v);else onCancel();
+},[onAdd,onCancel]);
+
+return(
+<div style={{width:W,height:H,borderRadius:R,marginRight:GAP,background:color.bg,position:“relative”,overflow:“hidden”,flexShrink:0,animation:“popIn .26s cubic-bezier(.34,1.56,.64,1) both”}}>
+<Scratches a={color.accent}/>
+<div style={{position:“relative”,zIndex:1,padding:“12px 14px”,height:“100%”,display:“flex”,flexDirection:“column”,justifyContent:“flex-end”}}>
+<input ref={inputRef} type=“text” inputMode=“text” enterKeyHint=“done”
+autoFocus autoComplete=“off” autoCorrect=“off” spellCheck=“false”
+placeholder=“Görev adı…”
+onKeyDown={e=>{if(e.key===“Enter”){e.preventDefault();submit()}if(e.key===“Escape”)onCancel()}}
+onBlur={()=>setTimeout(submit,250)}
+style={{fontWeight:600,fontSize:16,color:”#fff”,lineHeight:1.22,letterSpacing:”-.01em”,
+background:“transparent”,border:“none”,outline:“none”,padding:0,margin:0,width:“100%”,
+caretColor:”#fff”,fontFamily:“inherit”}}
+/>
+</div>
+</div>
+);
+}
+
+function dampedPull(rawDx){const l=rawDx*0.55;return l<=MAX_PULL?l:MAX_PULL+(l-MAX_PULL)*0.15}
+
+const INIT=[
+{id:1,text:“Vergi beyannamesi hazırla”,color:COLORS[0]},
+{id:2,text:“Danıştay kararlarını incele”,color:COLORS[1]},
+{id:3,text:“Blog yazısı taslağı”,color:COLORS[2]},
+{id:4,text:“Müvekkil toplantı notu”,color:COLORS[3]},
+{id:5,text:“Qdrant index güncelle”,color:COLORS[4]},
+];
+
+function App(){
+const[todos,setTodos]=useState(INIT);
+const[nid,setNid]=useState(6);
+const[adding,setAdding]=useState(false);
+const[newCol,setNewCol]=useState(null);
+const[removingSet,setRemovingSet]=useState(new Set());
+
+const scrRef=useRef(null);
+const trackRef=useRef(null);
+const indicatorRef=useRef(null);
+const todosRef=useRef(todos);
+todosRef.current=todos;
+const addingRef=useRef(false);
+const g=useRef({active:false});
+
+const updateIndicator=(pullVal)=>{
+const el=indicatorRef.current;if(!el)return;
+const p=Math.min(pullVal/TH,1);const on=p>.85;const s=.3+p*.7;
+el.style.opacity=String(Math.min(p*1.5,1));
+el.style.transform=`translateX(${Math.min(pullVal-56,4)}px) scale(${s})`;
+const icon=el.querySelector(”.pull-icon”);
+if(icon){icon.style.transform=`rotate(${p*90}deg)`;icon.style.color=on?”#A78BFA”:“rgba(255,255,255,.5)”}
+el.style.borderColor=on?“rgba(167,139,250,.6)”:“rgba(255,255,255,.15)”;
+el.style.background=on?“rgba(124,58,237,.25)”:“rgba(255,255,255,.05)”;
+};
+
+const resetVisuals=()=>{
+if(trackRef.current){trackRef.current.style.transform=””;trackRef.current.style.transition=“transform .3s cubic-bezier(.25,1,.5,1)”}
+if(indicatorRef.current){indicatorRef.current.style.opacity=“0”;indicatorRef.current.style.transform=“translateX(-56px) scale(.3)”}
+};
+
+const doAdd=useCallback(()=>{
+if(addingRef.current)return;addingRef.current=true;
+const c=rndColor(todosRef.current.map(t=>t.color.bg));
+setNewCol(c);setAdding(true);
+},[]);
+
+useEffect(()=>{
+const el=scrRef.current;if(!el)return;
+const onStart=(e)=>{
+if(e.target.closest(“button”)||e.target.closest(“input”))return;
+const t=e.touches[0];
+g.current={active:true,pulling:false,startX:t.clientX,startY:t.clientY,axis:null};
+};
+const onMove=(e)=>{
+const gs=g.current;if(!gs.active)return;
+const t=e.touches[0];const dx=t.clientX-gs.startX,dy=t.clientY-gs.startY;
+if(!gs.axis){if(Math.abs(dx)<4&&Math.abs(dy)<4)return;gs.axis=Math.abs(dx)>=Math.abs(dy)?“x”:“y”}
+if(gs.axis===“y”)return;
+if(!gs.pulling&&el.scrollLeft<2&&dx>4)gs.pulling=true;
+if(gs.pulling){
+e.preventDefault();gs.pullVal=dampedPull(Math.max(0,dx));
+if(trackRef.current){trackRef.current.style.transform=`translateX(${gs.pullVal}px)`;trackRef.current.style.transition=“none”}
+updateIndicator(gs.pullVal);
+}
+};
+const onEnd=()=>{
+const gs=g.current;if(!gs.active)return;
+if(gs.pulling&&(gs.pullVal||0)>TH)doAdd();
+resetVisuals();g.current={active:false};
+};
+el.addEventListener(“touchstart”,onStart,{passive:true});
+el.addEventListener(“touchmove”,onMove,{passive:false});
+el.addEventListener(“touchend”,onEnd,{passive:true});
+el.addEventListener(“touchcancel”,onEnd,{passive:true});
+return()=>{el.removeEventListener(“touchstart”,onStart);el.removeEventListener(“touchmove”,onMove);el.removeEventListener(“touchend”,onEnd);el.removeEventListener(“touchcancel”,onEnd)};
+},[doAdd]);
+
+const mDown=useCallback((e)=>{
+if(e.target.closest(“button”)||e.target.closest(“input”))return;
+g.current={active:true,pulling:false,startX:e.clientX,axis:“x”,mouse:true,sl:scrRef.current?.scrollLeft||0};
+e.preventDefault();
+},[]);
+
+useEffect(()=>{
+const mv=(e)=>{
+const gs=g.current;if(!gs.active||!gs.mouse)return;
+const dx=e.clientX-gs.startX;
+if(!gs.pulling&&gs.sl<2&&dx>4)gs.pulling=true;
+if(gs.pulling){
+gs.pullVal=dampedPull(Math.max(0,dx));
+if(trackRef.current){trackRef.current.style.transform=`translateX(${gs.pullVal}px)`;trackRef.current.style.transition=“none”}
+updateIndicator(gs.pullVal);
+}else if(scrRef.current){scrRef.current.scrollLeft=gs.sl-dx}
+};
+const up=()=>{
+const gs=g.current;if(!gs.active||!gs.mouse)return;
+if(gs.pulling&&(gs.pullVal||0)>TH)doAdd();
+resetVisuals();g.current={active:false};
+};
+window.addEventListener(“mousemove”,mv);window.addEventListener(“mouseup”,up);
+return()=>{window.removeEventListener(“mousemove”,mv);window.removeEventListener(“mouseup”,up)};
+},[doAdd]);
+
+const add=useCallback((text)=>{
+const c=newCol||rndColor(todos.map(t=>t.color.bg));
+setTodos(p=>[{id:nid,text,color:c},…p]);
+setNid(n=>n+1);setAdding(false);setNewCol(null);addingRef.current=false;
+},[newCol,todos,nid]);
+
+const cancelAdd=useCallback(()=>{setAdding(false);setNewCol(null);addingRef.current=false},[]);
+
+const handleDone=useCallback((id,actualRemove)=>{
+if(actualRemove){setTodos(p=>p.filter(t=>t.id!==id));setRemovingSet(s=>{const n=new Set(s);n.delete(id);return n})}
+else{setRemovingSet(s=>new Set(s).add(id))}
+},[]);
+
+const handleRename=useCallback((id,t)=>{setTodos(p=>p.map(x=>x.id===id?{…x,text:t}:x))},[]);
+
+return(
+<div style={{position:“fixed”,inset:0,background:”#000”,overflow:“hidden”,
+fontFamily:”-apple-system,‘SF Pro Rounded’,‘SF Pro Display’,BlinkMacSystemFont,sans-serif”}}>
+
+```
+  <div style={{position:"absolute",left:0,right:0,top:100}}>
+    <div style={{padding:"0 20px",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div>
+        <h1 style={{fontSize:26,fontWeight:700,color:"#fff",margin:0,letterSpacing:"-.025em"}}>Görevler</h1>
+        <p style={{fontSize:13.5,color:"rgba(255,255,255,.35)",margin:"3px 0 0",fontWeight:500}}>
+          {todos.length===0&&!adding?"Hepsini tamamladın!":"← sola çek veya + ile ekle"}
+        </p>
+      </div>
+      <button onClick={doAdd} style={{
+        width:36,height:36,borderRadius:12,background:"rgba(255,255,255,.08)",
+        border:"1px solid rgba(255,255,255,.15)",display:"flex",alignItems:"center",
+        justifyContent:"center",cursor:"pointer",flexShrink:0,
+      }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.6)" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+    </div>
+
+    <div style={{position:"relative",padding:"10px 0"}}>
+      <div ref={indicatorRef} style={{
+        position:"absolute",left:20,top:"50%",marginTop:-24,zIndex:0,
+        width:48,height:48,borderRadius:14,border:"2px dashed rgba(255,255,255,.15)",
+        background:"rgba(255,255,255,.05)",display:"flex",alignItems:"center",justifyContent:"center",
+        opacity:0,transform:"translateX(-56px) scale(.3)",transition:"border-color .15s,background .15s",pointerEvents:"none",
+      }}>
+        <div className="pull-icon" style={{color:"rgba(255,255,255,.5)",display:"flex",transition:"color .15s"}}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </div>
+      </div>
+
+      <div ref={scrRef} onMouseDown={mDown} style={{
+        overflowX:"auto",overflowY:"hidden",WebkitOverflowScrolling:"touch",
+        position:"relative",zIndex:1,userSelect:"none",WebkitUserSelect:"none",
+      }}>
+        <div ref={trackRef} style={{display:"flex",padding:"0 20px",transition:"transform .3s cubic-bezier(.25,1,.5,1)"}}>
+          {adding&&<NewCard color={newCol||COLORS[0]} onAdd={add} onCancel={cancelAdd}/>}
+          {todos.map(todo=><Card key={todo.id} todo={todo} onDone={handleDone} onRename={handleRename} removing={removingSet.has(todo.id)}/>)}
+          {todos.length===0&&!adding&&(
+            <div style={{width:W,height:H,borderRadius:R,flexShrink:0,border:"2px dashed rgba(255,255,255,.08)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:6}}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.15)" strokeWidth="2" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <span style={{fontSize:12,color:"rgba(255,255,255,.15)",fontWeight:600}}>Harika!</span>
+            </div>
+          )}
+          <div style={{width:20,flexShrink:0}}/>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+);
+}
+
+ReactDOM.createRoot(document.getElementById(“root”)).render(<App/>);
+</script>
+
+</body>
+</html>
