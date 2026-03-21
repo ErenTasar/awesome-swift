@@ -10,7 +10,6 @@
 html,body{overflow:hidden;position:fixed;width:100%;height:100%;background:#000;font-family:-apple-system,'SF Pro Rounded','SF Pro Display',BlinkMacSystemFont,sans-serif}
 input::placeholder{color:rgba(255,255,255,.3)}
 #root{position:fixed;inset:0}
-@keyframes popIn{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
 </style>
 </head>
 <body>
@@ -42,579 +41,650 @@ input::placeholder{color:rgba(255,255,255,.3)}
 
 <script>
 (function(){
-// --- Layout stabilizasyonu + responsive dikey ortalama ---
-var appContainer=document.getElementById("appContainer");
-var contentBlock=document.getElementById("contentBlock");
-var initialHeight=window.innerHeight;
-var CONTENT_HEIGHT=190; // başlık(~50) + kartlar(~124) + padding(~16)
-appContainer.style.height=initialHeight+"px";
 
-// Sabit pozisyon: ekranın %38'i civarında — klavye açık/kapalı fark etmez
-var fixedTop=Math.max(40,Math.round(initialHeight*0.38-CONTENT_HEIGHT/2));
-contentBlock.style.top=fixedTop+"px";
+/* ═══════════════════════════════════════════
+   CONFIG — sabitler, renkler, boyutlar
+   ═══════════════════════════════════════════ */
+var Config={
+  COLORS:[
+    {bg:"#7C3AED",accent:"#A78BFA"},
+    {bg:"#E84545",accent:"#FF8A8A"},
+    {bg:"#0EA5E9",accent:"#7DD3FC"},
+    {bg:"#CA8A04",accent:"#FDE047"},
+    {bg:"#10B981",accent:"#6EE7B7"},
+    {bg:"#E11D9E",accent:"#F9A8D4"},
+    {bg:"#6366F1",accent:"#A5B4FC"},
+    {bg:"#EA580C",accent:"#FDBA74"},
+  ],
+  W:168, H:124, R:20, GAP:12,
+  get SLOT(){return this.W+this.GAP;},
+  PULL_THRESHOLD:68,
+  PULL_MAX:90,
+  SCRATCHES:[
+    [15,8,185,132,2.8],[35,3,195,118,2],[8,35,165,137,2.4],
+    [55,0,198,95,1.6],[3,60,145,138,2.2],[75,2,197,78,1.4]
+  ],
+  CONTENT_HEIGHT:190,
 
-function positionContent(){
-// Klavye açıkken kartlar görünür alanın dışına taşıyorsa yukarı çek
-var visibleH=window.visualViewport?window.visualViewport.height:initialHeight;
-var contentBottom=fixedTop+CONTENT_HEIGHT;
-if(contentBottom>visibleH-24){
-var top=Math.max(20,visibleH-24-CONTENT_HEIGHT);
-contentBlock.style.transition="top .28s cubic-bezier(.25,1,.5,1)";
-contentBlock.style.top=top+"px";
-}else{
-contentBlock.style.transition="top .28s cubic-bezier(.25,1,.5,1)";
-contentBlock.style.top=fixedTop+"px";
-}
-}
+  pickColor:function(usedBgs){
+    var available=this.COLORS.filter(function(c){return usedBgs.indexOf(c.bg)===-1;});
+    var pool=available.length?available:this.COLORS;
+    return pool[Math.floor(Math.random()*pool.length)];
+  }
+};
 
-function compensateScroll(){
-if(window.visualViewport){
-var offset=window.visualViewport.offsetTop;
-appContainer.style.transform="translateY("+offset+"px)";
-}
-window.scrollTo(0,0);
-document.documentElement.scrollTop=0;
-document.body.scrollTop=0;
-}
 
-if(window.visualViewport){
-window.visualViewport.addEventListener("resize",function(){
-appContainer.style.height=initialHeight+"px";
-positionContent();
-compensateScroll();
-});
-window.visualViewport.addEventListener("scroll",function(){
-compensateScroll();
-});
-}
-window.addEventListener("scroll",function(){
-window.scrollTo(0,0);
-compensateScroll();
-},{passive:false});
+/* ═══════════════════════════════════════════
+   STATE — uygulama durumu
+   ═══════════════════════════════════════════ */
+var State={
+  todos:[
+    {id:1,text:"Vergi beyannamesi hazırla",color:Config.COLORS[0]},
+    {id:2,text:"Danıştay kararlarını incele",color:Config.COLORS[1]},
+    {id:3,text:"Blog yazısı taslağı",color:Config.COLORS[2]},
+    {id:4,text:"Müvekkil toplantı notu",color:Config.COLORS[3]},
+    {id:5,text:"Qdrant index güncelle",color:Config.COLORS[4]},
+  ],
+  nextId:6,
+  adding:false,
+  addingLock:false,
+  newCol:null
+};
 
-// --- Proxy input: klavye açılması için user gesture zincirinde senkron focus ---
-var proxyInput=document.createElement("input");
-proxyInput.type="text";proxyInput.inputMode="text";
-proxyInput.setAttribute("aria-hidden","true");
-proxyInput.tabIndex=-1;
-Object.assign(proxyInput.style,{position:"fixed",top:"-9999px",left:"-9999px",opacity:"0",width:"1px",height:"1px",border:"none",padding:"0",margin:"0",pointerEvents:"none"});
-document.body.appendChild(proxyInput);
 
-const COLORS=[
-{bg:"#7C3AED",accent:"#A78BFA"},
-{bg:"#E84545",accent:"#FF8A8A"},
-{bg:"#0EA5E9",accent:"#7DD3FC"},
-{bg:"#CA8A04",accent:"#FDE047"},
-{bg:"#10B981",accent:"#6EE7B7"},
-{bg:"#E11D9E",accent:"#F9A8D4"},
-{bg:"#6366F1",accent:"#A5B4FC"},
-{bg:"#EA580C",accent:"#FDBA74"},
-];
-const W=168,H=124,R=20,GAP=12,SLOT=W+GAP,TH=68,MAX_PULL=90;
-const SCRATCHES=[[15,8,185,132,2.8],[35,3,195,118,2],[8,35,165,137,2.4],[55,0,198,95,1.6],[3,60,145,138,2.2],[75,2,197,78,1.4]];
+/* ═══════════════════════════════════════════
+   DOM — element referansları
+   ═══════════════════════════════════════════ */
+var DOM={
+  appContainer:  document.getElementById("appContainer"),
+  contentBlock:  document.getElementById("contentBlock"),
+  track:         document.getElementById("track"),
+  subtitle:      document.getElementById("subtitle"),
+  addBtn:        document.getElementById("addBtn"),
+  scrollContainer:document.getElementById("scrollContainer"),
+  pullIndicator: document.getElementById("pullIndicator"),
+  proxyInput:    null, // Layout.init içinde oluşturulacak
 
-let todos=[
-{id:1,text:"Vergi beyannamesi hazırla",color:COLORS[0]},
-{id:2,text:"Danıştay kararlarını incele",color:COLORS[1]},
-{id:3,text:"Blog yazısı taslağı",color:COLORS[2]},
-{id:4,text:"Müvekkil toplantı notu",color:COLORS[3]},
-{id:5,text:"Qdrant index güncelle",color:COLORS[4]},
-];
-let nextId=6;
-let adding=false;
-let addingLock=false;
-let newCol=null;
+  queryNewCard:function(){return this.track.querySelector(".new-card");}
+};
 
-const track=document.getElementById("track");
-const subtitle=document.getElementById("subtitle");
-const addBtn=document.getElementById("addBtn");
-const scrollContainer=document.getElementById("scrollContainer");
-const pullIndicator=document.getElementById("pullIndicator");
 
-function rndColor(used){
-const a=COLORS.filter(c=>!used.includes(c.bg));
-const p=a.length?a:COLORS;
-return p[Math.floor(Math.random()*p.length)];
-}
+/* ═══════════════════════════════════════════
+   LAYOUT — viewport stabilizasyonu, klavye
+   ═══════════════════════════════════════════ */
+var Layout=(function(){
+  var initialHeight=window.innerHeight;
+  var fixedTop;
 
-function createScratchesSVG(accent){
-const ns="http://www.w3.org/2000/svg";
-const svg=document.createElementNS(ns,"svg");
-Object.assign(svg.style,{position:"absolute",inset:"0",width:"100%",height:"100%",opacity:"0.12",pointerEvents:"none"});
-svg.setAttribute("viewBox","0 0 200 140");
-svg.setAttribute("preserveAspectRatio","none");
-SCRATCHES.forEach(([x1,y1,x2,y2,w])=>{
-const line=document.createElementNS(ns,"line");
-line.setAttribute("x1",x1);line.setAttribute("y1",y1);
-line.setAttribute("x2",x2);line.setAttribute("y2",y2);
-line.setAttribute("stroke",accent);line.setAttribute("stroke-width",w);
-line.setAttribute("stroke-linecap","round");
-svg.appendChild(line);
-});
-return svg;
-}
+  function init(){
+    DOM.appContainer.style.height=initialHeight+"px";
+    fixedTop=Math.max(40,Math.round(initialHeight*0.38-Config.CONTENT_HEIGHT/2));
+    DOM.contentBlock.style.top=fixedTop+"px";
 
-function createCardEl(todo){
-// Outer wrapper (handles width collapse animation)
-const wrapper=document.createElement("div");
-Object.assign(wrapper.style,{width:SLOT+"px",overflow:"hidden",flexShrink:"0"});
+    // Proxy input: klavye açılması için user gesture zincirinde senkron focus
+    var proxy=document.createElement("input");
+    proxy.type="text";proxy.inputMode="text";
+    proxy.setAttribute("aria-hidden","true");
+    proxy.tabIndex=-1;
+    Object.assign(proxy.style,{
+      position:"fixed",top:"-9999px",left:"-9999px",opacity:"0",
+      width:"1px",height:"1px",border:"none",padding:"0",margin:"0",pointerEvents:"none"
+    });
+    document.body.appendChild(proxy);
+    DOM.proxyInput=proxy;
 
-// Inner card
-const card=document.createElement("div");
-Object.assign(card.style,{
-width:W+"px",height:H+"px",borderRadius:R+"px",marginRight:GAP+"px",
-background:todo.color.bg,position:"relative",overflow:"hidden",
-opacity:"1",transform:"scale(1)",
-});
+    bindViewportEvents();
+  }
 
-card.appendChild(createScratchesSVG(todo.color.accent));
+  function positionContent(){
+    var visibleH=window.visualViewport?window.visualViewport.height:initialHeight;
+    var contentBottom=fixedTop+Config.CONTENT_HEIGHT;
+    var top=(contentBottom>visibleH-24)?Math.max(20,visibleH-24-Config.CONTENT_HEIGHT):fixedTop;
+    DOM.contentBlock.style.transition="top .28s cubic-bezier(.25,1,.5,1)";
+    DOM.contentBlock.style.top=top+"px";
+  }
 
-// Content layer
-const content=document.createElement("div");
-Object.assign(content.style,{position:"relative",zIndex:"1",padding:"12px 14px",height:"100%",display:"flex",flexDirection:"column",justifyContent:"space-between"});
+  function compensateScroll(){
+    if(window.visualViewport){
+      DOM.appContainer.style.transform="translateY("+window.visualViewport.offsetTop+"px)";
+    }
+    window.scrollTo(0,0);
+    document.documentElement.scrollTop=0;
+    document.body.scrollTop=0;
+  }
 
-// Check button row
-const btnRow=document.createElement("div");
-Object.assign(btnRow.style,{display:"flex",justifyContent:"flex-end"});
-const checkBtn=document.createElement("button");
-Object.assign(checkBtn.style,{
-width:"26px",height:"26px",borderRadius:"50%",border:"2px solid rgba(255,255,255,.28)",
-background:"rgba(255,255,255,.08)",display:"flex",alignItems:"center",justifyContent:"center",
-cursor:"pointer",padding:"0",transition:"background .15s,border-color .15s",
-});
-checkBtn.innerHTML='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-checkBtn.addEventListener("click",function(e){
-e.stopPropagation();
-startRemoveAnimation(wrapper,card,todo.id);
-});
-btnRow.appendChild(checkBtn);
-content.appendChild(btnRow);
+  function bindViewportEvents(){
+    if(window.visualViewport){
+      window.visualViewport.addEventListener("resize",function(){
+        DOM.appContainer.style.height=initialHeight+"px";
+        positionContent();
+        compensateScroll();
+      });
+      window.visualViewport.addEventListener("scroll",compensateScroll);
+    }
+    window.addEventListener("scroll",function(){
+      window.scrollTo(0,0);
+      compensateScroll();
+    },{passive:false});
+  }
 
-// Text area
-const textDiv=document.createElement("div");
-Object.assign(textDiv.style,{
-fontWeight:"600",fontSize:"15.5px",color:"#fff",lineHeight:"1.22",letterSpacing:"-.01em",
-display:"-webkit-box",WebkitLineClamp:"2",WebkitBoxOrient:"vertical",
-overflow:"hidden",textOverflow:"ellipsis",wordBreak:"break-all",cursor:"text",
-});
-textDiv.textContent=todo.text;
-textDiv.addEventListener("click",function(e){
-e.stopPropagation();
-startEditing(content,textDiv,todo);
-});
-content.appendChild(textDiv);
+  return {init:init};
+})();
 
-card.appendChild(content);
-wrapper.appendChild(card);
-return wrapper;
-}
 
-function startEditing(content,textDiv,todo){
-const input=document.createElement("input");
-input.type="text";input.inputMode="text";input.enterKeyHint="done";
-input.autocomplete="off";input.value=todo.text;
-Object.assign(input.style,{
-fontWeight:"600",fontSize:"16px",color:"#fff",lineHeight:"1.22",letterSpacing:"-.01em",
-background:"rgba(0,0,0,.15)",border:"none",borderRadius:"6px",outline:"none",
-padding:"2px 4px",margin:"-2px -4px",width:"calc(100% + 8px)",caretColor:"#fff",fontFamily:"inherit",
-});
+/* ═══════════════════════════════════════════
+   CARD FACTORY — kart DOM elemanları üretimi
+   ═══════════════════════════════════════════ */
+var CardFactory=(function(){
 
-let committed=false;
-function commit(){
-if(committed)return;committed=true;
-const v=(input.value||"").trim();
-if(v&&v!==todo.text){
-todo.text=v;
-}
-// Replace input with text div
-const newTextDiv=document.createElement("div");
-Object.assign(newTextDiv.style,{
-fontWeight:"600",fontSize:"15.5px",color:"#fff",lineHeight:"1.22",letterSpacing:"-.01em",
-display:"-webkit-box",WebkitLineClamp:"2",WebkitBoxOrient:"vertical",
-overflow:"hidden",textOverflow:"ellipsis",wordBreak:"break-all",cursor:"text",
-});
-newTextDiv.textContent=todo.text;
-newTextDiv.addEventListener("click",function(e){
-e.stopPropagation();
-startEditing(content,newTextDiv,todo);
-});
-content.replaceChild(newTextDiv,input);
-}
+  function scratches(accent){
+    var ns="http://www.w3.org/2000/svg";
+    var svg=document.createElementNS(ns,"svg");
+    Object.assign(svg.style,{position:"absolute",inset:"0",width:"100%",height:"100%",opacity:"0.12",pointerEvents:"none"});
+    svg.setAttribute("viewBox","0 0 200 140");
+    svg.setAttribute("preserveAspectRatio","none");
+    Config.SCRATCHES.forEach(function(s){
+      var line=document.createElementNS(ns,"line");
+      line.setAttribute("x1",s[0]);line.setAttribute("y1",s[1]);
+      line.setAttribute("x2",s[2]);line.setAttribute("y2",s[3]);
+      line.setAttribute("stroke",accent);line.setAttribute("stroke-width",s[4]);
+      line.setAttribute("stroke-linecap","round");
+      svg.appendChild(line);
+    });
+    return svg;
+  }
 
-input.addEventListener("keydown",function(e){
-if(e.key==="Enter"){e.preventDefault();commit();}
-if(e.key==="Escape"){committed=true;content.replaceChild(textDiv,input);}
-});
-input.addEventListener("blur",function(){setTimeout(commit,150);});
+  function checkButton(onClick){
+    var btn=document.createElement("button");
+    Object.assign(btn.style,{
+      width:"26px",height:"26px",borderRadius:"50%",border:"2px solid rgba(255,255,255,.28)",
+      background:"rgba(255,255,255,.08)",display:"flex",alignItems:"center",justifyContent:"center",
+      cursor:"pointer",padding:"0",transition:"background .15s,border-color .15s",
+    });
+    btn.innerHTML='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    btn.addEventListener("click",function(e){e.stopPropagation();onClick();});
+    return btn;
+  }
 
-content.replaceChild(input,textDiv);
-input.focus({preventScroll:true});
-input.setSelectionRange(0,input.value.length);
-window.scrollTo(0,0);
-}
+  function textLabel(text,onEdit){
+    var div=document.createElement("div");
+    Object.assign(div.style,{
+      fontWeight:"600",fontSize:"15.5px",color:"#fff",lineHeight:"1.22",letterSpacing:"-.01em",
+      display:"-webkit-box",WebkitLineClamp:"2",WebkitBoxOrient:"vertical",
+      overflow:"hidden",textOverflow:"ellipsis",wordBreak:"break-all",cursor:"text",
+    });
+    div.textContent=text;
+    div.addEventListener("click",function(e){e.stopPropagation();onEdit(div);});
+    return div;
+  }
 
-function startRemoveAnimation(wrapper,card,id){
-// Stage 1: fade out + shrink (double-rAF to avoid flicker)
-card.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
-requestAnimationFrame(function(){
-requestAnimationFrame(function(){
-card.style.opacity="0";
-card.style.transform="scale(.85) translateY(-6px)";
-});
-});
+  function contentContainer(justify){
+    var div=document.createElement("div");
+    Object.assign(div.style,{
+      position:"relative",zIndex:"1",padding:"12px 14px",height:"100%",
+      display:"flex",flexDirection:"column",justifyContent:justify||"space-between"
+    });
+    return div;
+  }
 
-// Stage 2: collapse width with rounded corners
-setTimeout(function(){
-wrapper.style.borderRadius=R+"px";
-wrapper.style.transition="width .32s cubic-bezier(.4,0,.2,1)";
-wrapper.style.width="0px";
-wrapper.addEventListener("transitionend",function handler(e){
-if(e.propertyName==="width"){
-wrapper.removeEventListener("transitionend",handler);
-todos=todos.filter(t=>t.id!==id);
-wrapper.remove();
-updateSubtitle();
-if(todos.length===0&&!adding)showEmptyState();
-}
-});
-},300);
-}
+  // Mevcut task kartı
+  function existing(todo){
+    var wrapper=document.createElement("div");
+    Object.assign(wrapper.style,{width:Config.SLOT+"px",overflow:"hidden",flexShrink:"0"});
 
-function showEmptyState(){
-// Remove existing empty state if any
-const existing=track.querySelector(".empty-state");
-if(existing)existing.remove();
+    var card=document.createElement("div");
+    Object.assign(card.style,{
+      width:Config.W+"px",height:Config.H+"px",borderRadius:Config.R+"px",marginRight:Config.GAP+"px",
+      background:todo.color.bg,position:"relative",overflow:"hidden",opacity:"1",transform:"scale(1)",
+    });
+    card.appendChild(scratches(todo.color.accent));
 
-const empty=document.createElement("div");
-empty.className="empty-state";
-Object.assign(empty.style,{
-width:W+"px",height:H+"px",borderRadius:R+"px",flexShrink:"0",
-border:"2px dashed rgba(255,255,255,.08)",display:"flex",alignItems:"center",
-justifyContent:"center",flexDirection:"column",gap:"6px",
-});
-empty.innerHTML='<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg><span style="font-size:12px;color:rgba(255,255,255,.15);font-weight:600">Harika!</span>';
-// Also add spacer
-const spacer=document.createElement("div");
-Object.assign(spacer.style,{width:"20px",flexShrink:"0"});
-track.appendChild(empty);
-track.appendChild(spacer);
-}
+    var content=contentContainer("space-between");
 
-function removeEmptyState(){
-const existing=track.querySelector(".empty-state");
-if(existing)existing.remove();
-}
+    var btnRow=document.createElement("div");
+    Object.assign(btnRow.style,{display:"flex",justifyContent:"flex-end"});
+    btnRow.appendChild(checkButton(function(){
+      Animations.remove(wrapper,card,todo.id);
+    }));
+    content.appendChild(btnRow);
 
-function updateSubtitle(){
-if(todos.length===0&&!adding){
-subtitle.textContent="Hepsini tamamladın!";
-}else{
-subtitle.textContent="← sola çek veya + ile ekle";
-}
-}
+    content.appendChild(textLabel(todo.text,function(div){
+      Editing.start(content,div,todo);
+    }));
 
-function createNewCardEl(color,pullWidth){
-// Dış collapser — width animasyonu için
-var startW=pullWidth?Math.min(pullWidth,W+GAP):0;
-const collapser=document.createElement("div");
-Object.assign(collapser.style,{
-width:startW+"px",overflow:"hidden",flexShrink:"0",
-transition:"width .32s cubic-bezier(.25,1,.5,1)",
-});
-collapser.className="new-card";
+    card.appendChild(content);
+    wrapper.appendChild(card);
+    return wrapper;
+  }
 
-// İç kart (görsel) — fade-out'un ayna simetrisi
-const card=document.createElement("div");
-Object.assign(card.style,{
-width:W+"px",height:H+"px",borderRadius:R+"px",marginRight:GAP+"px",
-background:color.bg,position:"relative",overflow:"hidden",flexShrink:"0",
-opacity:"0",transform:"scale(.85) translateY(6px)",
-});
+  // Yeni task kartı (input modunda)
+  function blank(color,pullWidth){
+    var startW=pullWidth?Math.min(pullWidth,Config.SLOT):0;
 
-card.appendChild(createScratchesSVG(color.accent));
+    var collapser=document.createElement("div");
+    Object.assign(collapser.style,{
+      width:startW+"px",overflow:"hidden",flexShrink:"0",
+      transition:"width .32s cubic-bezier(.25,1,.5,1)",
+    });
+    collapser.className="new-card";
 
-const content=document.createElement("div");
-Object.assign(content.style,{position:"relative",zIndex:"1",padding:"12px 14px",height:"100%",display:"flex",flexDirection:"column",justifyContent:"flex-end"});
+    var card=document.createElement("div");
+    Object.assign(card.style,{
+      width:Config.W+"px",height:Config.H+"px",borderRadius:Config.R+"px",marginRight:Config.GAP+"px",
+      background:color.bg,position:"relative",overflow:"hidden",flexShrink:"0",
+      opacity:"0",transform:"scale(.85) translateY(6px)",
+    });
+    card.appendChild(scratches(color.accent));
 
-const input=document.createElement("input");
-input.type="text";input.inputMode="text";input.enterKeyHint="done";
-input.autocomplete="off";input.spellcheck=false;
-input.placeholder="Görev adı...";
-Object.assign(input.style,{
-fontWeight:"600",fontSize:"16px",color:"#fff",lineHeight:"1.22",letterSpacing:"-.01em",
-background:"transparent",border:"none",outline:"none",padding:"0",margin:"0",width:"100%",
-caretColor:"transparent",fontFamily:"inherit",
-});
-setTimeout(function(){input.style.caretColor="#fff";},620);
+    var content=contentContainer("flex-end");
 
-let submitted=false;
-function submit(){
-if(submitted)return;submitted=true;
-const v=(input.value||"").trim();
-if(v){
-addTodo(v,color);
-}else{
-cancelAdding();
-}
-}
+    var input=document.createElement("input");
+    input.type="text";input.inputMode="text";input.enterKeyHint="done";
+    input.autocomplete="off";input.spellcheck=false;
+    input.placeholder="Görev adı...";
+    Object.assign(input.style,{
+      fontWeight:"600",fontSize:"16px",color:"#fff",lineHeight:"1.22",letterSpacing:"-.01em",
+      background:"transparent",border:"none",outline:"none",padding:"0",margin:"0",width:"100%",
+      caretColor:"transparent",fontFamily:"inherit",
+    });
+    setTimeout(function(){input.style.caretColor="#fff";},620);
 
-input.addEventListener("keydown",function(e){
-if(e.key==="Enter"){e.preventDefault();submit();}
-if(e.key==="Escape"){submitted=true;cancelAdding();}
-});
-input.addEventListener("blur",function(){setTimeout(submit,250);});
+    var submitted=false;
+    function submit(){
+      if(submitted)return;submitted=true;
+      var v=(input.value||"").trim();
+      if(v){TodoManager.confirm(v,color);}
+      else{TodoManager.cancel();}
+    }
+    input.addEventListener("keydown",function(e){
+      if(e.key==="Enter"){e.preventDefault();submit();}
+      if(e.key==="Escape"){submitted=true;TodoManager.cancel();}
+    });
+    input.addEventListener("blur",function(){setTimeout(submit,250);});
 
-content.appendChild(input);
-card.appendChild(content);
-collapser.appendChild(card);
+    content.appendChild(input);
+    card.appendChild(content);
+    collapser.appendChild(card);
 
-// Animate in: width expand + fade-in
-requestAnimationFrame(function(){
-requestAnimationFrame(function(){
-collapser.style.width=(W+GAP)+"px";
-});
-});
-// pullWidth varsa alan zaten kısmen açık, daha erken fade-in
-var fadeDelay=pullWidth?100:320;
-setTimeout(function(){
-card.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
-card.style.opacity="1";
-card.style.transform="scale(1) translateY(0)";
-},fadeDelay);
+    // Width genişleme
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        collapser.style.width=Config.SLOT+"px";
+      });
+    });
 
-// Focus transfer: proxy zaten klavyeyi açtı, şimdi gerçek input'a geç
-requestAnimationFrame(function(){
-input.focus({preventScroll:true});
-window.scrollTo(0,0);
-});
+    // Fade-in: pull'dan geliyorsa erken, + butonundan geliyorsa geç
+    var fadeDelay=pullWidth?100:320;
+    setTimeout(function(){
+      card.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
+      card.style.opacity="1";
+      card.style.transform="scale(1) translateY(0)";
+    },fadeDelay);
 
-return collapser;
-}
+    // Focus transfer
+    requestAnimationFrame(function(){
+      input.focus({preventScroll:true});
+      window.scrollTo(0,0);
+    });
 
-function addTodo(text,color){
-const todo={id:nextId++,text:text,color:color};
-todos.unshift(todo);
-adding=false;addingLock=false;newCol=null;
+    return collapser;
+  }
 
-// Yerinde dönüşüm: new-card'ı normal karta çevir (yeniden spawn yok)
-const nc=track.querySelector(".new-card");
-if(nc){
-nc.className=""; // new-card class'ını kaldır
-const card=nc.firstElementChild; // iç kart div
-const content=card.querySelector("div[style*='z-index']");
-if(content){
-// Input'u kaldır
-const input=content.querySelector("input");
-if(input)content.removeChild(input);
+  // Yeni kartı mevcut karta dönüştür (yerinde — DOM'dan kaldırıp tekrar oluşturmaz)
+  function promote(nc,todo){
+    nc.className="";
+    var card=nc.firstElementChild;
+    var content=card.querySelector("div[style*='z-index']");
+    if(!content)return;
 
-// justifyContent'i space-between yap (üst: check, alt: text)
-content.style.justifyContent="space-between";
+    // Input'u kaldır
+    var input=content.querySelector("input");
+    if(input)content.removeChild(input);
 
-// Check button row ekle (üste)
-const btnRow=document.createElement("div");
-Object.assign(btnRow.style,{display:"flex",justifyContent:"flex-end"});
-const checkBtn=document.createElement("button");
-Object.assign(checkBtn.style,{
-width:"26px",height:"26px",borderRadius:"50%",border:"2px solid rgba(255,255,255,.28)",
-background:"rgba(255,255,255,.08)",display:"flex",alignItems:"center",justifyContent:"center",
-cursor:"pointer",padding:"0",transition:"background .15s,border-color .15s",
-});
-checkBtn.innerHTML='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-checkBtn.addEventListener("click",function(e){
-e.stopPropagation();
-startRemoveAnimation(nc,card,todo.id);
-});
-btnRow.appendChild(checkBtn);
-content.insertBefore(btnRow,content.firstChild);
+    content.style.justifyContent="space-between";
 
-// Text div ekle (alta)
-const textDiv=document.createElement("div");
-Object.assign(textDiv.style,{
-fontWeight:"600",fontSize:"15.5px",color:"#fff",lineHeight:"1.22",letterSpacing:"-.01em",
-display:"-webkit-box",WebkitLineClamp:"2",WebkitBoxOrient:"vertical",
-overflow:"hidden",textOverflow:"ellipsis",wordBreak:"break-all",cursor:"text",
-});
-textDiv.textContent=text;
-textDiv.addEventListener("click",function(e){
-e.stopPropagation();
-startEditing(content,textDiv,todo);
-});
-content.appendChild(textDiv);
-}
-}
+    // Check button
+    var btnRow=document.createElement("div");
+    Object.assign(btnRow.style,{display:"flex",justifyContent:"flex-end"});
+    btnRow.appendChild(checkButton(function(){
+      Animations.remove(nc,card,todo.id);
+    }));
+    content.insertBefore(btnRow,content.firstChild);
 
-removeEmptyState();
-updateSubtitle();
-}
+    // Text label
+    content.appendChild(textLabel(todo.text,function(div){
+      Editing.start(content,div,todo);
+    }));
+  }
 
-function cancelAdding(){
-adding=false;addingLock=false;newCol=null;
-const nc=track.querySelector(".new-card"); // collapser div
-if(!nc){updateSubtitle();if(todos.length===0)showEmptyState();return;}
-const card=nc.firstElementChild; // iç kart
-// Stage 1: fade+scale iç kart
-if(card){
-card.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
-requestAnimationFrame(function(){
-requestAnimationFrame(function(){
-card.style.opacity="0";
-card.style.transform="scale(.85) translateY(-6px)";
-});
-});
-}
-// Stage 2: collapse collapser width
-setTimeout(function(){
-nc.style.transition="width .32s cubic-bezier(.4,0,.2,1)";
-nc.style.width="0px";
-nc.addEventListener("transitionend",function handler(e){
-if(e.propertyName==="width"){
-nc.removeEventListener("transitionend",handler);
-nc.remove();
-updateSubtitle();
-if(todos.length===0&&!adding)showEmptyState();
-}
-});
-},300);
-}
+  return {existing:existing, blank:blank, promote:promote};
+})();
 
-function doAdd(pullWidth){
-if(addingLock)return;
-// Senkron proxy focus — user gesture zincirinde klavyeyi aktifleştirir
-proxyInput.focus({preventScroll:true});
-addingLock=true;adding=true;
-const usedColors=todos.map(t=>t.color.bg);
-newCol=rndColor(usedColors);
 
-removeEmptyState();
+/* ═══════════════════════════════════════════
+   ANIMATIONS — kart animasyonları
+   ═══════════════════════════════════════════ */
+var Animations={
 
-// Insert new card at beginning of track
-const newCardEl=createNewCardEl(newCol,pullWidth);
-track.insertBefore(newCardEl,track.firstChild);
-updateSubtitle();
-}
+  // Kart silme: fade-out → width collapse → DOM kaldır
+  remove:function(wrapper,card,id){
+    card.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        card.style.opacity="0";
+        card.style.transform="scale(.85) translateY(-6px)";
+      });
+    });
+    setTimeout(function(){
+      wrapper.style.borderRadius=Config.R+"px";
+      wrapper.style.transition="width .32s cubic-bezier(.4,0,.2,1)";
+      wrapper.style.width="0px";
+      wrapper.addEventListener("transitionend",function handler(e){
+        if(e.propertyName==="width"){
+          wrapper.removeEventListener("transitionend",handler);
+          State.todos=State.todos.filter(function(t){return t.id!==id;});
+          wrapper.remove();
+          UI.updateSubtitle();
+          if(State.todos.length===0&&!State.adding)UI.showEmptyState();
+        }
+      });
+    },300);
+  },
 
-function renderAll(){
-track.innerHTML="";
+  // Yeni kart iptali: fade-out → width collapse → DOM kaldır
+  collapse:function(nc){
+    var card=nc.firstElementChild;
+    if(card){
+      card.style.transition="opacity .3s ease, transform .3s cubic-bezier(.4,0,.2,1)";
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){
+          card.style.opacity="0";
+          card.style.transform="scale(.85) translateY(-6px)";
+        });
+      });
+    }
+    setTimeout(function(){
+      nc.style.transition="width .32s cubic-bezier(.4,0,.2,1)";
+      nc.style.width="0px";
+      nc.addEventListener("transitionend",function handler(e){
+        if(e.propertyName==="width"){
+          nc.removeEventListener("transitionend",handler);
+          nc.remove();
+          UI.updateSubtitle();
+          if(State.todos.length===0&&!State.adding)UI.showEmptyState();
+        }
+      });
+    },300);
+  }
+};
 
-if(todos.length===0&&!adding){
-showEmptyState();
-}else{
-todos.forEach(function(todo){
-track.appendChild(createCardEl(todo));
-});
-// Spacer
-const spacer=document.createElement("div");
-Object.assign(spacer.style,{width:"20px",flexShrink:"0"});
-track.appendChild(spacer);
-}
-updateSubtitle();
-}
 
-// + button
-addBtn.addEventListener("click",doAdd);
+/* ═══════════════════════════════════════════
+   EDITING — satır içi metin düzenleme
+   ═══════════════════════════════════════════ */
+var Editing={
+  start:function(content,textDiv,todo){
+    var input=document.createElement("input");
+    input.type="text";input.inputMode="text";input.enterKeyHint="done";
+    input.autocomplete="off";input.value=todo.text;
+    Object.assign(input.style,{
+      fontWeight:"600",fontSize:"16px",color:"#fff",lineHeight:"1.22",letterSpacing:"-.01em",
+      background:"rgba(0,0,0,.15)",border:"none",borderRadius:"6px",outline:"none",
+      padding:"2px 4px",margin:"-2px -4px",width:"calc(100% + 8px)",caretColor:"#fff",fontFamily:"inherit",
+    });
 
-// Pull-to-add helpers
-function dampedPull(rawDx){const l=rawDx*0.55;return l<=MAX_PULL?l:MAX_PULL+(l-MAX_PULL)*0.15;}
+    var committed=false;
+    function commit(){
+      if(committed)return;committed=true;
+      var v=(input.value||"").trim();
+      if(v&&v!==todo.text)todo.text=v;
+      var label=document.createElement("div");
+      Object.assign(label.style,{
+        fontWeight:"600",fontSize:"15.5px",color:"#fff",lineHeight:"1.22",letterSpacing:"-.01em",
+        display:"-webkit-box",WebkitLineClamp:"2",WebkitBoxOrient:"vertical",
+        overflow:"hidden",textOverflow:"ellipsis",wordBreak:"break-all",cursor:"text",
+      });
+      label.textContent=todo.text;
+      label.addEventListener("click",function(e){
+        e.stopPropagation();
+        Editing.start(content,label,todo);
+      });
+      content.replaceChild(label,input);
+    }
 
-function updateIndicator(pullVal){
-const el=pullIndicator;
-const p=Math.min(pullVal/TH,1);const on=p>.85;const s=.3+p*.7;
-el.style.opacity=String(Math.min(p*1.5,1));
-el.style.transform="translateX("+Math.min(pullVal-56,4)+"px) scale("+s+")";
-const icon=el.querySelector(".pull-icon");
-if(icon){icon.style.transform="rotate("+p*90+"deg)";icon.style.color=on?"#A78BFA":"rgba(255,255,255,.5)";}
-el.style.borderColor=on?"rgba(167,139,250,.6)":"rgba(255,255,255,.15)";
-el.style.background=on?"rgba(124,58,237,.25)":"rgba(255,255,255,.05)";
-}
+    input.addEventListener("keydown",function(e){
+      if(e.key==="Enter"){e.preventDefault();commit();}
+      if(e.key==="Escape"){committed=true;content.replaceChild(textDiv,input);}
+    });
+    input.addEventListener("blur",function(){setTimeout(commit,150);});
 
-function resetVisuals(){
-track.style.transform="";
-track.style.transition="transform .3s cubic-bezier(.25,1,.5,1)";
-pullIndicator.style.opacity="0";
-pullIndicator.style.transform="translateX(-56px) scale(.3)";
-}
+    content.replaceChild(input,textDiv);
+    input.focus({preventScroll:true});
+    input.setSelectionRange(0,input.value.length);
+    window.scrollTo(0,0);
+  }
+};
 
-// Touch gesture
-let g={active:false};
 
-scrollContainer.addEventListener("touchstart",function(e){
-if(e.target.closest("button")||e.target.closest("input"))return;
-const t=e.touches[0];
-g={active:true,pulling:false,startX:t.clientX,startY:t.clientY,axis:null};
-},{passive:true});
+/* ═══════════════════════════════════════════
+   UI — boş durum, subtitle, render
+   ═══════════════════════════════════════════ */
+var UI={
+  showEmptyState:function(){
+    var existing=DOM.track.querySelector(".empty-state");
+    if(existing)existing.remove();
 
-scrollContainer.addEventListener("touchmove",function(e){
-if(!g.active)return;
-const t=e.touches[0];
-const dx=t.clientX-g.startX,dy=t.clientY-g.startY;
-if(!g.axis){if(Math.abs(dx)<4&&Math.abs(dy)<4)return;g.axis=Math.abs(dx)>=Math.abs(dy)?"x":"y";}
-if(g.axis==="y")return;
-if(!g.pulling&&scrollContainer.scrollLeft<2&&dx>4)g.pulling=true;
-if(g.pulling){
-e.preventDefault();g.pullVal=dampedPull(Math.max(0,dx));
-track.style.transform="translateX("+g.pullVal+"px)";
-track.style.transition="none";
-updateIndicator(g.pullVal);
-}
-},{passive:false});
+    var empty=document.createElement("div");
+    empty.className="empty-state";
+    Object.assign(empty.style,{
+      width:Config.W+"px",height:Config.H+"px",borderRadius:Config.R+"px",flexShrink:"0",
+      border:"2px dashed rgba(255,255,255,.08)",display:"flex",alignItems:"center",
+      justifyContent:"center",flexDirection:"column",gap:"6px",
+    });
+    empty.innerHTML='<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg><span style="font-size:12px;color:rgba(255,255,255,.15);font-weight:600">Harika!</span>';
 
-scrollContainer.addEventListener("touchend",function(){
-if(!g.active)return;
-if(g.pulling&&(g.pullVal||0)>TH){
-doAdd(g.pullVal||0);
-// Track transform sıfırla (collapser alanı tutuyor), indicator gizle
-track.style.transition="transform .3s cubic-bezier(.25,1,.5,1)";
-track.style.transform="";
-pullIndicator.style.opacity="0";
-pullIndicator.style.transform="translateX(-56px) scale(.3)";
-}else{
-resetVisuals();
-}
-g={active:false};
-},{passive:true});
+    var spacer=document.createElement("div");
+    Object.assign(spacer.style,{width:"20px",flexShrink:"0"});
+    DOM.track.appendChild(empty);
+    DOM.track.appendChild(spacer);
+  },
 
-scrollContainer.addEventListener("touchcancel",function(){
-if(!g.active)return;
-resetVisuals();g={active:false};
-},{passive:true});
+  removeEmptyState:function(){
+    var el=DOM.track.querySelector(".empty-state");
+    if(el)el.remove();
+  },
 
-// Mouse gesture
-scrollContainer.addEventListener("mousedown",function(e){
-if(e.target.closest("button")||e.target.closest("input"))return;
-g={active:true,pulling:false,startX:e.clientX,axis:"x",mouse:true,sl:scrollContainer.scrollLeft||0};
-e.preventDefault();
-});
+  updateSubtitle:function(){
+    DOM.subtitle.textContent=(State.todos.length===0&&!State.adding)
+      ?"Hepsini tamamladın!"
+      :"← sola çek veya + ile ekle";
+  },
 
-window.addEventListener("mousemove",function(e){
-if(!g.active||!g.mouse)return;
-const dx=e.clientX-g.startX;
-if(!g.pulling&&g.sl<2&&dx>4)g.pulling=true;
-if(g.pulling){
-g.pullVal=dampedPull(Math.max(0,dx));
-track.style.transform="translateX("+g.pullVal+"px)";
-track.style.transition="none";
-updateIndicator(g.pullVal);
-}else{
-scrollContainer.scrollLeft=g.sl-dx;
-}
-});
+  renderAll:function(){
+    DOM.track.innerHTML="";
+    if(State.todos.length===0&&!State.adding){
+      UI.showEmptyState();
+    }else{
+      State.todos.forEach(function(todo){
+        DOM.track.appendChild(CardFactory.existing(todo));
+      });
+      var spacer=document.createElement("div");
+      Object.assign(spacer.style,{width:"20px",flexShrink:"0"});
+      DOM.track.appendChild(spacer);
+    }
+    UI.updateSubtitle();
+  }
+};
 
-window.addEventListener("mouseup",function(){
-if(!g.active||!g.mouse)return;
-if(g.pulling&&(g.pullVal||0)>TH){
-doAdd(g.pullVal||0);
-track.style.transition="transform .3s cubic-bezier(.25,1,.5,1)";
-track.style.transform="";
-pullIndicator.style.opacity="0";
-pullIndicator.style.transform="translateX(-56px) scale(.3)";
-}else{
-resetVisuals();
-}
-g={active:false};
-});
 
-// Initial render
-renderAll();
+/* ═══════════════════════════════════════════
+   TODO MANAGER — ekleme, onaylama, iptal
+   ═══════════════════════════════════════════ */
+var TodoManager={
+  add:function(pullWidth){
+    if(State.addingLock)return;
+    DOM.proxyInput.focus({preventScroll:true});
+    State.addingLock=true;
+    State.adding=true;
+    State.newCol=Config.pickColor(State.todos.map(function(t){return t.color.bg;}));
+
+    UI.removeEmptyState();
+
+    var el=CardFactory.blank(State.newCol,pullWidth);
+    DOM.track.insertBefore(el,DOM.track.firstChild);
+    UI.updateSubtitle();
+  },
+
+  confirm:function(text,color){
+    var todo={id:State.nextId++,text:text,color:color};
+    State.todos.unshift(todo);
+    State.adding=false;State.addingLock=false;State.newCol=null;
+
+    var nc=DOM.queryNewCard();
+    if(nc)CardFactory.promote(nc,todo);
+
+    UI.removeEmptyState();
+    UI.updateSubtitle();
+  },
+
+  cancel:function(){
+    State.adding=false;State.addingLock=false;State.newCol=null;
+    var nc=DOM.queryNewCard();
+    if(!nc){UI.updateSubtitle();if(State.todos.length===0)UI.showEmptyState();return;}
+    Animations.collapse(nc);
+  }
+};
+
+
+/* ═══════════════════════════════════════════
+   GESTURES — pull-to-add (touch + mouse)
+   ═══════════════════════════════════════════ */
+var Gestures=(function(){
+  var g={active:false};
+
+  function dampedPull(rawDx){
+    var l=rawDx*0.55;
+    return l<=Config.PULL_MAX?l:Config.PULL_MAX+(l-Config.PULL_MAX)*0.15;
+  }
+
+  function updateIndicator(pullVal){
+    var el=DOM.pullIndicator;
+    var p=Math.min(pullVal/Config.PULL_THRESHOLD,1);
+    var on=p>.85;
+    var s=.3+p*.7;
+    el.style.opacity=String(Math.min(p*1.5,1));
+    el.style.transform="translateX("+Math.min(pullVal-56,4)+"px) scale("+s+")";
+    var icon=el.querySelector(".pull-icon");
+    if(icon){
+      icon.style.transform="rotate("+p*90+"deg)";
+      icon.style.color=on?"#A78BFA":"rgba(255,255,255,.5)";
+    }
+    el.style.borderColor=on?"rgba(167,139,250,.6)":"rgba(255,255,255,.15)";
+    el.style.background=on?"rgba(124,58,237,.25)":"rgba(255,255,255,.05)";
+  }
+
+  function resetVisuals(){
+    DOM.track.style.transform="";
+    DOM.track.style.transition="transform .3s cubic-bezier(.25,1,.5,1)";
+    DOM.pullIndicator.style.opacity="0";
+    DOM.pullIndicator.style.transform="translateX(-56px) scale(.3)";
+  }
+
+  function commitPull(pullVal){
+    TodoManager.add(pullVal);
+    DOM.track.style.transition="transform .3s cubic-bezier(.25,1,.5,1)";
+    DOM.track.style.transform="";
+    DOM.pullIndicator.style.opacity="0";
+    DOM.pullIndicator.style.transform="translateX(-56px) scale(.3)";
+  }
+
+  function applyPull(dx){
+    g.pullVal=dampedPull(Math.max(0,dx));
+    DOM.track.style.transform="translateX("+g.pullVal+"px)";
+    DOM.track.style.transition="none";
+    updateIndicator(g.pullVal);
+  }
+
+  function endGesture(){
+    if(g.pulling&&(g.pullVal||0)>Config.PULL_THRESHOLD){
+      commitPull(g.pullVal||0);
+    }else{
+      resetVisuals();
+    }
+    g={active:false};
+  }
+
+  function isInteractive(target){
+    return target.closest("button")||target.closest("input");
+  }
+
+  function init(){
+    var sc=DOM.scrollContainer;
+
+    // Touch
+    sc.addEventListener("touchstart",function(e){
+      if(isInteractive(e.target))return;
+      var t=e.touches[0];
+      g={active:true,pulling:false,startX:t.clientX,startY:t.clientY,axis:null};
+    },{passive:true});
+
+    sc.addEventListener("touchmove",function(e){
+      if(!g.active)return;
+      var t=e.touches[0];
+      var dx=t.clientX-g.startX,dy=t.clientY-g.startY;
+      if(!g.axis){
+        if(Math.abs(dx)<4&&Math.abs(dy)<4)return;
+        g.axis=Math.abs(dx)>=Math.abs(dy)?"x":"y";
+      }
+      if(g.axis==="y")return;
+      if(!g.pulling&&sc.scrollLeft<2&&dx>4)g.pulling=true;
+      if(g.pulling){e.preventDefault();applyPull(dx);}
+    },{passive:false});
+
+    sc.addEventListener("touchend",function(){
+      if(!g.active)return;
+      endGesture();
+    },{passive:true});
+
+    sc.addEventListener("touchcancel",function(){
+      if(!g.active)return;
+      resetVisuals();g={active:false};
+    },{passive:true});
+
+    // Mouse
+    sc.addEventListener("mousedown",function(e){
+      if(isInteractive(e.target))return;
+      g={active:true,pulling:false,startX:e.clientX,axis:"x",mouse:true,sl:sc.scrollLeft||0};
+      e.preventDefault();
+    });
+
+    window.addEventListener("mousemove",function(e){
+      if(!g.active||!g.mouse)return;
+      var dx=e.clientX-g.startX;
+      if(!g.pulling&&g.sl<2&&dx>4)g.pulling=true;
+      if(g.pulling){applyPull(dx);}
+      else{sc.scrollLeft=g.sl-dx;}
+    });
+
+    window.addEventListener("mouseup",function(){
+      if(!g.active||!g.mouse)return;
+      endGesture();
+    });
+
+    // + button
+    DOM.addBtn.addEventListener("click",function(){TodoManager.add();});
+  }
+
+  return {init:init};
+})();
+
+
+/* ═══════════════════════════════════════════
+   INIT — başlat
+   ═══════════════════════════════════════════ */
+Layout.init();
+Gestures.init();
+UI.renderAll();
 
 })();
 </script>
