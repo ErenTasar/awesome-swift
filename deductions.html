@@ -42,7 +42,7 @@ input::placeholder { color: rgba(255,255,255,.3) }
           </div>
         </div>
         <div id="scrollContainer" style="overflow-x:auto;overflow-y:hidden;position:relative;z-index:1;user-select:none;-webkit-user-select:none">
-          <div id="track" style="display:flex;padding:0 20px"></div>
+          <div id="track" style="display:flex;padding:0 0 0 20px"></div>
         </div>
       </div>
     </div>
@@ -569,7 +569,7 @@ var UI=(function(){
 
   function spacer(){
     var s=document.createElement("div");
-    Object.assign(s.style,{width:"20px",flexShrink:"0"});
+    Object.assign(s.style,{width:"40px",flexShrink:"0"});
     return s;
   }
 
@@ -1000,7 +1000,7 @@ var Gestures=(function(){
     bounceAnim=DOM.track.animate([
       {transform:"translateX("+overscrollPx+"px)"},
       {transform:"translateX(0)"}
-    ],{duration:500,easing:"cubic-bezier(.32,1.2,.5,1)"});
+    ],{duration:420,easing:"cubic-bezier(.25,.46,.45,.94)"});
     bounceAnim.onfinish=function(){bounceAnim=null;};
   }
 
@@ -1017,13 +1017,21 @@ var Gestures=(function(){
     function step(now){
       var dt=now-lastT;lastT=now;
       vel*=Math.pow(Config.MOMENTUM_FRICTION,dt/16.67);
+
+      // Edge damping: increase friction near scroll boundaries for gentle approach
+      var maxSc=sc.scrollWidth-sc.clientWidth;
+      var edgeDist=Math.min(sc.scrollLeft,maxSc-sc.scrollLeft);
+      if(edgeDist<120){
+        var edgeFactor=Math.max(0,edgeDist/120);
+        vel*=0.6+0.4*edgeFactor; // ramp friction: 60% retention at edge → 100% at 120px away
+      }
+
       if(Math.abs(vel)<Config.MOMENTUM_MIN){momentumRAF=null;return;}
       sc.scrollLeft-=vel;
-      var maxSc=sc.scrollWidth-sc.clientWidth;
       if((sc.scrollLeft<=0&&vel>0)||(sc.scrollLeft>=maxSc&&vel<0)){
         momentumRAF=null;
-        var over=vel*8;
-        over=Math.sign(over)*Math.min(Math.abs(over),50);
+        var over=vel*3;
+        over=Math.sign(over)*Math.min(Math.abs(over),28);
         if(Math.abs(over)>2)bounce(over);
         return;
       }
@@ -1139,7 +1147,7 @@ var Gestures=(function(){
           var clamped=scrollEl.scrollLeft===before&&frameDx!==0;
           if(clamped){
             g.overscroll=(g.overscroll||0)+frameDx*0.5;
-            g.overscroll=Math.sign(g.overscroll)*Math.min(Math.abs(g.overscroll),80);
+            g.overscroll=Math.sign(g.overscroll)*Math.min(Math.abs(g.overscroll),50);
             DOM.track.style.transform="translateX("+g.overscroll+"px)";
           }else if(g.overscroll){
             g.overscroll=0;
