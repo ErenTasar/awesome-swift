@@ -917,6 +917,8 @@ var Gestures=(function(){
     if(adx<Config.AXIS_THRESHOLD&&ady<Config.AXIS_THRESHOLD)return null;
     if(adx>ady*Config.AXIS_RATIO)return "x";
     if(ady>adx*Config.AXIS_RATIO)return "y";
+    // Çapraz ama yeterli hareket varsa dominant ekseni seç
+    if(adx+ady>10)return adx>=ady?"x":"y";
     return null;
   }
 
@@ -1019,6 +1021,7 @@ var Gestures=(function(){
         g.axis=detectAxis(dx,dy);
         if(!g.axis){
           e.preventDefault();
+          vel.add(t.clientX);
           sc.scrollLeft-=(t.clientX-g.lastX);
           g.lastX=t.clientX;
           return;
@@ -1075,11 +1078,11 @@ var Gestures=(function(){
     ac.addEventListener("touchend",function(){
       if(!g.active)return;
 
-      // Yatay finalize
-      if(g.axis==="x"){
-        if(g.pulling&&(g.pullVal||0)>Config.PULL_THRESHOLD){
+      // Yatay finalize (axis=x veya tentative scroll yapıldıysa)
+      if(g.axis==="x"||!g.axis){
+        if(g.axis==="x"&&g.pulling&&(g.pullVal||0)>Config.PULL_THRESHOLD){
           commitPull(g.pullVal||0);
-        }else if(g.pulling){
+        }else if(g.axis==="x"&&g.pulling){
           resetVisuals();
         }else{
           if(g.overscroll&&Math.abs(g.overscroll)>2){
