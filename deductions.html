@@ -206,9 +206,14 @@ var Layout=(function(){
   var fixedTop;
 
   function init(){
+    var measurer=document.createElement("div");
+    measurer.style.cssText="position:fixed;top:0;height:100svh;pointer-events:none;visibility:hidden";
+    document.body.appendChild(measurer);
+    var svh=measurer.offsetHeight||initialHeight;
+    document.body.removeChild(measurer);
+
     DOM.appContainer.style.height=initialHeight+"px";
-    var vh=window.visualViewport?window.visualViewport.height:initialHeight;
-    fixedTop=Math.max(40,Math.round(vh*0.38-Config.CONTENT_HEIGHT/2));
+    fixedTop=Math.max(40,Math.round(svh*0.38-Config.CONTENT_HEIGHT/2));
     DOM.contentBlock.style.top=fixedTop+"px";
     RowManager.position(fixedTop);
 
