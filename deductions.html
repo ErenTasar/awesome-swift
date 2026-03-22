@@ -36,7 +36,7 @@ input::placeholder { color: rgba(255,255,255,.3) }
         </button>
       </div>
       <div id="rowContainer" style="position:relative">
-        <div id="row1Wrap" style="overflow:hidden;height:0;opacity:0;pointer-events:none">
+        <div id="row1Wrap" style="position:absolute;left:0;right:0;bottom:100%;overflow:hidden;height:0;opacity:0;pointer-events:none">
           <div style="overflow:hidden;padding:6px 0">
             <div id="row1Track" style="display:flex;padding:0 0 0 15px;gap:9px;will-change:transform"></div>
           </div>
@@ -51,7 +51,7 @@ input::placeholder { color: rgba(255,255,255,.3) }
             <div id="row2Track" style="display:flex;padding:0 0 0 20px"></div>
           </div>
         </div>
-        <div id="row3Wrap" style="overflow:hidden;height:0;opacity:0;pointer-events:none">
+        <div id="row3Wrap" style="position:absolute;left:0;right:0;top:100%;overflow:hidden;height:0;opacity:0;pointer-events:none">
           <div style="overflow:hidden;padding:6px 0">
             <div id="row3Track" style="display:flex;padding:0 0 0 15px;gap:9px;will-change:transform"></div>
           </div>
@@ -722,8 +722,13 @@ var RowManager=(function(){
     wrap.style.pointerEvents="none";
     wrap.style.height=PASSIVE_ROW_H+"px";
     wrap.style.overflow="hidden";
-    wrap.style.marginBottom=direction==="up"?ROW_GAP+"px":"0";
-    wrap.style.marginTop=direction==="down"?ROW_GAP+"px":"0";
+    // Row 1: bottom:100% + margin-bottom ile row2'nin üstünde
+    // Row 3: top:100% + margin-top ile row2'nin altında
+    if(direction==="up"){
+      wrap.style.marginBottom=ROW_GAP+"px";
+    }else{
+      wrap.style.marginTop=ROW_GAP+"px";
+    }
   }
 
   function hideRow(wrap){
@@ -971,6 +976,19 @@ var Navigation=(function(){
     if(currentAnim){
       currentAnim.forEach(function(a){try{a.cancel();}catch(e){}});
       currentAnim=null;
+    }
+    // Swipe snapshot temizliği
+    if(startSwipe._snapshot){
+      startSwipe._snapshot.remove();
+      startSwipe._snapshot=null;
+    }
+    // Orphan snapshot'ları temizle (animateTransition'dan kalan klonlar)
+    var children=DOM.appContainer.children;
+    for(var i=children.length-1;i>=0;i--){
+      var ch=children[i];
+      if(ch!==DOM.contentBlock&&ch.style.zIndex==="10"){
+        ch.remove();
+      }
     }
     DOM.contentBlock.style.opacity="1";
     DOM.contentBlock.style.transform="none";
