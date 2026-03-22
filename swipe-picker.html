@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Swipe Picker</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;touch-action:none}
+html,body{width:100%;height:100%;overflow:hidden;touch-action:none;
+  overscroll-behavior:none;-webkit-overflow-scrolling:none;
+  -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
+  position:fixed;inset:0;
+  background:#0a0a0f;font-family:'SF Mono','Fira Code','Consolas',monospace;color:#ccc}
+#toolbar{display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;background:#111118;border-bottom:1px solid #222;
+  position:fixed;top:0;left:0;right:0;z-index:10;height:54px}
+#values{display:flex;align-items:center;gap:6px}
+.vb{padding:5px 10px;border-radius:5px;font-size:15px;border:1px solid #333;
+  background:#1a1a22;transition:all .2s;min-width:44px;text-align:center}
+.vb.active{background:#1a1a2a}
+.vb.done{border-color:#3a8;color:#3a8;background:#1a2a1a}
+.vb.waiting{color:#444;border-color:#222}
+.vl{font-size:9px;color:#666;margin-bottom:2px;text-align:center}
+.vn{font-size:16px;font-weight:bold}
+.tbtn{background:none;border:1px solid #333;color:#777;padding:4px 14px;
+  border-radius:4px;cursor:pointer;font-size:12px;font-family:inherit;transition:all .15s}
+.tbtn:hover{border-color:#e44;color:#e66}
+#area{position:fixed;top:54px;left:0;right:0;bottom:0;cursor:crosshair;touch-action:none;overscroll-behavior:none}
+#canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+#hint div{text-align:center;color:#444;font-size:14px}
+.icon{font-size:28px;margin-bottom:8px}
+.sub{font-size:11px;color:#333;margin-top:4px}
+#result{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  font-size:14px;pointer-events:none;z-index:5;text-align:center}
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <div id="values">
+    <div class="vb waiting" id="vb0"><div class="vl">Saat</div><div class="vn" id="vn0">--</div></div>
+    <div style="color:#333">:</div>
+    <div class="vb waiting" id="vb1"><div class="vl">Dakika</div><div class="vn" id="vn1">--</div></div>
+    <div style="color:#333;margin:0 4px">·</div>
+    <div class="vb waiting" id="vb2"><div class="vl">Ay</div><div class="vn" id="vn2">--</div></div>
+    <div style="color:#333">/</div>
+    <div class="vb waiting" id="vb3"><div class="vl">Gün</div><div class="vn" id="vn3">--</div></div>
+  </div>
+  <button class="tbtn" id="clearBtn">Sıfırla</button>
+  <button class="tbtn" id="logBtn" style="margin-left:6px">Log Kopyala</button>
+</div>
+<div id="area">
+  <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100%" height="100%" fill="transparent"/>
+    <g id="gCompleted"></g>
+    <g id="gActive"></g>
+    <g id="gGuide"></g>
+  </svg>
+  <div id="hint"><div>
+    <div class="icon">⟋</div>
+    <div>Sürükle: Saat → Dakika → Ay → Gün</div>
+    <div class="sub">Her dönüşte sonraki alana geçer</div>
+  </div></div>
+</div>
+<div id="result"></div>
+<script>
+// === CONFIGURATION ===
+const CONFIG = {
+  RANGE: 264,
+  LOCK_DIST: 20,
+  PERP_THRESH: 35,
+  NET_MAG_MIN: 20,
+  DIR_THRESH: Math.PI / 4,
+  MIN_DIST: 25,
+  TRAIL_SIZE: 12,
+  LOG_MAX: 5000,
+  MOVE_LOG_INTERVAL: 5
+};
+
+const FIELDS = [
+  {label:"Saat",values:["01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","16","17","18","19","20","21","22","23","00"]},
+  {label:"Dakika",values:["05","10","15","20","25","30","35","40","45","50","55","00"]},
+  {label:"Ay",values:["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"]},
+  {label:"Gün",values:Array.from({length:31},(_,i)=>String(i+1))}
+];
+for (let i = 0; i < FIELDS.length; i++) FIELDS[i].step = CONFIG.RANGE / FIELDS[i].values.length;
+
+const COLORS = ["#4af","#f4a","#4fa","#fa4"];
+
+// === CACHED DOM REFERENCES ===
+const elArea   = document.getElementById("area");
+const elSvg    = document.getElementById("canvas");
+const elHint   = document.getElementById("hint");
+const elResult = document.getElementById("result");
+const elGComp  = document.getElementById("gCompleted");
+const elGAct   = document.getElementById("gActive");
+const elGGuide = document.getElementById("gGuide");
+const elLogBtn = document.getElementById("logBtn");
+const elClearBtn = document.getElementById("clearBtn");
+const elVB = [0,1,2,3].map(i => document.getElementById("vb" + i));
+const elVN = [0,1,2,3].map(i => document.getElementById("vn" + i));
+
+// === STATE ===
+const NS = "http://www.w3.org/2000/svg";
+let polys = [];
+let dr = null;
+let curSegs = null;
+const picked = [null, null, null, null];
+let _dirty = false;
+let _rafId = 0;
+
+// Last displayed values for dirty-check in updateBoxes
+const _lastBox = { af: -2, texts: ["","","",""], classes: ["","","",""] };
+
+// === LOG (Ring Buffer) ===
+let LOG = [];
+let logT0 = 0;
+let logWriteIdx = 0;
+
+function logEv(type, data) {
+  const t = Date.now() - logT0;
+  const entry = {t, ev: type};
+  for (const k in data) entry[k] = typeof data[k] === 'number' ? Math.round(data[k] * 10) / 10 : data[k];
+  if (LOG.length < CONFIG.LOG_MAX) {
+    LOG.push(entry);
+  } else {
+    LOG[logWriteIdx % CONFIG.LOG_MAX] = entry;
+  }
+  logWriteIdx++;
+}
+
+// === GEOMETRY UTILITIES ===
+
+// Scratch objects to avoid per-frame allocation
+const _proj = {x1:0, y1:0, x2:0, y2:0, len:0, angle:0, fi:0};
+const _val = {idx:-1, text:"–"};
+
+function valFromLen(fi, len) {
+  const f = FIELDS[fi];
+  if (len < f.step * 0.5) { _val.idx = -1; _val.text = "–"; return _val; }
+  const idx = Math.min(f.values.length - 1, Math.max(0, Math.round(len / f.step) - 1));
+  _val.idx = idx;
+  _val.text = f.values[idx];
+  return _val;
+}
+
+// Copy scratch projection to a persistent object (for done segments)
+function cloneProj(src) {
+  return {x1:src.x1, y1:src.y1, x2:src.x2, y2:src.y2, len:src.len, angle:src.angle, fi:src.fi};
+}
+
+function projSeg(ox, oy, cos, sin, px, py) {
+  const dx = px - ox, dy = py - oy;
+  const p = Math.max(0, dx * cos + dy * sin);
+  _proj.x1 = ox; _proj.y1 = oy;
+  _proj.x2 = ox + cos * p; _proj.y2 = oy + sin * p;
+  _proj.len = p;
+  return _proj;
+}
+
+function perpDist(px, py, ox, oy, sin, cos) {
+  return Math.abs(-(px - ox) * sin + (py - oy) * cos);
+}
+
+function trailNet(trail) {
+  if (trail.length < 3) return null;
+  const first = trail[0], last = trail[trail.length - 1];
+  const dx = last.x - first.x, dy = last.y - first.y;
+  const mag = Math.sqrt(dx * dx + dy * dy);
+  if (mag < CONFIG.NET_MAG_MIN) return null;
+  return {angle: Math.atan2(dy, dx), mag};
+}
+
+function axisDev(a, locked) {
+  let d1 = Math.abs(a - locked) % (2 * Math.PI);
+  if (d1 > Math.PI) d1 = 2 * Math.PI - d1;
+  let d2 = Math.abs(a - (locked + Math.PI)) % (2 * Math.PI);
+  if (d2 > Math.PI) d2 = 2 * Math.PI - d2;
+  return Math.min(d1, d2);
+}
+
+// === SVG RENDERING ===
+
+function mkEl(t, a) {
+  const e = document.createElementNS(NS, t);
+  for (const k in a) e.setAttribute(k, a[k]);
+  return e;
+}
+
+function drawSegToGroup(g, s, col, op, joint) {
+  g.appendChild(mkEl("line", {x1:s.x1, y1:s.y1, x2:s.x2, y2:s.y2,
+    stroke:col, "stroke-width":6, "stroke-linecap":"round", opacity:op * .15}));
+  g.appendChild(mkEl("line", {x1:s.x1, y1:s.y1, x2:s.x2, y2:s.y2,
+    stroke:col, "stroke-width":2, "stroke-linecap":"round", opacity:op}));
+  g.appendChild(mkEl("circle", {cx:s.x1, cy:s.y1, r:3, fill:col, opacity:op * .8}));
+  g.appendChild(mkEl("circle", {cx:s.x2, cy:s.y2, r:3, fill:col, opacity:op * .8}));
+  if (joint) g.appendChild(mkEl("circle", {cx:s.x1, cy:s.y1, r:5.5,
+    fill:"none", stroke:col, "stroke-width":1.5, opacity:op * .45}));
+  if (s.len > 10 && s.fi !== undefined) {
+    const v = valFromLen(s.fi, s.len);
+    if (v.idx >= 0) {
+      const mx = (s.x1 + s.x2) / 2, my = (s.y1 + s.y2) / 2;
+      const a = Math.atan2(s.y2 - s.y1, s.x2 - s.x1);
+      const t = mkEl("text", {x:mx - Math.sin(a) * 20, y:my + Math.cos(a) * 20,
+        fill:col, "font-size":13, "font-weight":"bold", "text-anchor":"middle",
+        "dominant-baseline":"central",
+        "font-family":"'SF Mono','Fira Code',monospace", "pointer-events":"none", opacity:.9});
+      t.textContent = v.text;
+      g.appendChild(t);
+    }
+  }
+}
+
+// Rebuild completed polys layer (called only when polys change)
+function renderCompleted() {
+  // Clear
+  while (elGComp.firstChild) elGComp.removeChild(elGComp.firstChild);
+  for (let pi = 0; pi < polys.length; pi++) {
+    const g = mkEl("g", {});
+    const poly = polys[pi];
+    for (let si = 0; si < poly.length; si++) {
+      drawSegToGroup(g, poly[si], COLORS[poly[si].fi] || "#3a8", .5, si > 0);
+    }
+    elGComp.appendChild(g);
+  }
+}
+
+// Render active segments + guide line (called every rAF frame during drag)
+function renderActive() {
+  // Clear active group
+  while (elGAct.firstChild) elGAct.removeChild(elGAct.firstChild);
+  while (elGGuide.firstChild) elGGuide.removeChild(elGGuide.firstChild);
+
+  if (curSegs && curSegs.length) {
+    const g = mkEl("g", {});
+    for (let si = 0; si < curSegs.length; si++) {
+      const isLast = si === curSegs.length - 1;
+      drawSegToGroup(g, curSegs[si], COLORS[curSegs[si].fi] || "#4af", isLast ? 1 : .65, si > 0);
+    }
+    elGAct.appendChild(g);
+
+    // Guide line
+    if (dr && dr.locked) {
+      const col = COLORS[dr.sf + dr.done.length] || "#4af";
+      elGGuide.appendChild(mkEl("line", {
+        x1:dr.ox - dr._cos * 4000, y1:dr.oy - dr._sin * 4000,
+        x2:dr.ox + dr._cos * 4000, y2:dr.oy + dr._sin * 4000,
+        stroke:col, "stroke-width":1, "stroke-dasharray":"4 8", opacity:.1
+      }));
+    }
+  }
+
+  elHint.style.display = (polys.length === 0 && !curSegs) ? "flex" : "none";
+}
+
+// Schedule a render on next animation frame
+function scheduleRender() {
+  if (!_dirty) {
+    _dirty = true;
+    _rafId = requestAnimationFrame(() => {
+      _dirty = false;
+      renderActive();
+    });
+  }
+}
+
+// Immediate render (for pointerup / clear / init)
+function renderNow() {
+  cancelAnimationFrame(_rafId);
+  _dirty = false;
+  renderCompleted();
+  renderActive();
+}
+
+// === UI UPDATE ===
+
+function updateBoxes(af, at) {
+  for (let i = 0; i < 4; i++) {
+    const b = elVB[i], n = elVN[i];
+    let cls, text, borderCol = "", col = "", shadow = "";
+
+    if (picked[i] !== null) {
+      cls = "vb done"; text = picked[i];
+    } else if (i === af) {
+      cls = "vb active"; text = at || "–";
+      borderCol = COLORS[i]; col = COLORS[i]; shadow = "0 0 12px " + COLORS[i] + "33";
+    } else {
+      cls = "vb waiting"; text = "–";
+    }
+
+    // Dirty check — only touch DOM if changed
+    if (_lastBox.classes[i] !== cls) {
+      b.className = cls;
+      _lastBox.classes[i] = cls;
+    }
+    if (_lastBox.texts[i] !== text) {
+      n.textContent = text;
+      _lastBox.texts[i] = text;
+    }
+    b.style.borderColor = borderCol;
+    b.style.color = col;
+    b.style.boxShadow = shadow;
+  }
+}
+
+function frame(segs) {
+  curSegs = segs;
+  scheduleRender();
+  if (segs && segs.length) {
+    const last = segs[segs.length - 1];
+    if (last.fi !== undefined) {
+      const v = valFromLen(last.fi, last.len);
+      updateBoxes(last.fi, v.idx >= 0 ? v.text : "–");
+    }
+  }
+}
+
+function gp(e) {
+  const r = elArea.getBoundingClientRect();
+  return {x: e.clientX - r.left, y: e.clientY - r.top};
+}
+
+// === EVENT PREVENTION (consolidated) ===
+['touchmove','touchstart','gesturestart','gesturechange','gestureend','wheel','scroll']
+  .forEach(evt => {
+    document.addEventListener(evt, e => {
+      if (evt === 'touchstart' && e.target.closest('#toolbar')) return;
+      e.preventDefault();
+    }, {passive: false});
+  });
+
+// === POINTER HANDLERS ===
+
+function onDown(e) {
+  e.preventDefault();
+  elArea.setPointerCapture(e.pointerId);
+  const sf = picked.filter(v => v !== null).length;
+  if (sf >= 4) return;
+  const p = gp(e);
+
+  // Cancel any pending rAF
+  cancelAnimationFrame(_rafId);
+  _dirty = false;
+
+  // Reset log
+  LOG = [];
+  logWriteIdx = 0;
+  logT0 = Date.now();
+  logEv("DOWN", {x: p.x, y: p.y, field: sf});
+
+  dr = {
+    ox: p.x, oy: p.y, angle: null, locked: false,
+    _cos: 0, _sin: 0,
+    done: [], trail: [p], sf: sf,
+    lastEnd: null, lastLen: 0,
+    stableEnd: null, stableLen: 0,
+    prevP: p, moveCount: 0
+  };
+
+  frame([{x1: p.x, y1: p.y, x2: p.x, y2: p.y, len: 0, angle: null, fi: sf}]);
+}
+
+function onMv(e) {
+  if (!dr) return;
+  e.preventDefault();
+  const p = gp(e), d = dr;
+
+  d.trail.push(p);
+  if (d.trail.length > CONFIG.TRAIL_SIZE) d.trail.shift();
+
+  const cf = d.sf + d.done.length;
+
+  // Not yet locked
+  if (!d.locked) {
+    const dx = p.x - d.ox, dy = p.y - d.oy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist >= CONFIG.LOCK_DIST) {
+      const net = trailNet(d.trail);
+      d.angle = net !== null ? net.angle : Math.atan2(dy, dx);
+      d._cos = Math.cos(d.angle);
+      d._sin = Math.sin(d.angle);
+      d.locked = true;
+      d.trail = [p];
+      logEv("LOCK", {x: p.x, y: p.y, angle: Math.round(d.angle * 180 / Math.PI), dist});
+    }
+    frame(d.done.concat([{x1: d.ox, y1: d.oy, x2: p.x, y2: p.y, len: Math.round(dist || 0), angle: null, fi: cf}]));
+    return;
+  }
+
+  // Locked — break check
+  const canBreak = cf + 1 < 4;
+  const pD = canBreak ? perpDist(p.x, p.y, d.ox, d.oy, d._sin, d._cos) : 0;
+  const net = canBreak ? trailNet(d.trail) : null;
+  const dx2 = p.x - d.ox, dy2 = p.y - d.oy;
+  const oD = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+  const netDev = net !== null ? axisDev(net.angle, d.angle) : 0;
+
+  // Log every Nth move
+  d.moveCount++;
+  if (d.moveCount % CONFIG.MOVE_LOG_INTERVAL === 0) {
+    projSeg(d.ox, d.oy, d._cos, d._sin, p.x, p.y);
+    const curVal = valFromLen(cf, _proj.len);
+    logEv("M", {pD, pL: _proj.len, v: curVal.text, sL: d.stableLen, f: cf});
+  }
+
+  if (canBreak
+      && pD >= CONFIG.PERP_THRESH
+      && d.stableEnd !== null
+      && net !== null
+      && netDev >= CONFIG.DIR_THRESH
+      && oD >= CONFIG.MIN_DIST) {
+    // BREAK — freeze at stable projection
+    const frozen = {x1: d.ox, y1: d.oy, x2: d.stableEnd.x, y2: d.stableEnd.y,
+                    len: d.stableLen, angle: d.angle, fi: cf};
+    const v = valFromLen(cf, frozen.len);
+    picked[cf] = v.idx >= 0 ? v.text : FIELDS[cf].values[0];
+    logEv("BRK", {f: cf, sL: frozen.len, v: v.text, pD});
+
+    if (frozen.len > 0) {
+      d.done.push(frozen);
+      d.ox = frozen.x2;
+      d.oy = frozen.y2;
+    }
+    d.angle = net.angle;
+    d._cos = Math.cos(d.angle);
+    d._sin = Math.sin(d.angle);
+    d.locked = true;
+    d.trail = [p];
+    d.lastEnd = null; d.lastLen = 0;
+    d.stableEnd = null; d.stableLen = 0;
+    d.prevP = p;
+
+    projSeg(d.ox, d.oy, d._cos, d._sin, p.x, p.y);
+    const newSeg = cloneProj(_proj);
+    newSeg.fi = cf + 1;
+    frame(d.done.concat([newSeg]));
+    updateBoxes(cf + 1, "–");
+    return;
+  }
+
+  // Normal projection
+  projSeg(d.ox, d.oy, d._cos, d._sin, p.x, p.y);
+  const seg = cloneProj(_proj);
+  seg.fi = cf;
+  d.lastEnd = {x: seg.x2, y: seg.y2};
+  d.lastLen = seg.len;
+
+  // Store stable projection only when motion is primarily along axis
+  const mdx = p.x - d.prevP.x, mdy = p.y - d.prevP.y;
+  const axialMov = Math.abs(mdx * d._cos + mdy * d._sin);
+  const perpMov = Math.abs(-mdx * d._sin + mdy * d._cos);
+  const pDNow = perpDist(p.x, p.y, d.ox, d.oy, d._sin, d._cos);
+  if (pDNow < 25 && axialMov >= perpMov) {
+    d.stableEnd = {x: seg.x2, y: seg.y2};
+    d.stableLen = seg.len;
+  }
+  d.prevP = p;
+  frame(d.done.concat([seg]));
+}
+
+function onUp(e) {
+  if (!dr) return;
+  elArea.releasePointerCapture(e.pointerId);
+
+  if (curSegs && curSegs.length) {
+    const last = curSegs[curSegs.length - 1];
+    if (last.fi !== undefined && last.fi < 4 && picked[last.fi] === null) {
+      const v = valFromLen(last.fi, last.len);
+      picked[last.fi] = v.idx >= 0 ? v.text : null;
+      logEv("UP_PICK", {f: last.fi, v: v.text});
+    }
+    const valid = curSegs.filter(s => s.len > 2);
+    if (valid.length) polys.push(valid);
+  }
+  logEv("UP", {picked: picked.slice()});
+  dr = null;
+  curSegs = null;
+  renderNow();
+
+  const nf = picked.filter(v => v !== null).length;
+  updateBoxes(nf < 4 ? nf : -1, null);
+
+  if (picked.every(v => v !== null)) {
+    elResult.textContent = picked[0] + ":" + picked[1] + " — " + picked[2] + " " + picked[3];
+    elResult.style.color = "#4af";
+  } else {
+    elResult.textContent = "";
+  }
+}
+
+elArea.addEventListener("pointerdown", onDown);
+elArea.addEventListener("pointermove", onMv);
+elArea.addEventListener("pointerup", onUp);
+elArea.addEventListener("pointercancel", onUp);
+
+// === BUTTONS ===
+
+elClearBtn.addEventListener("click", () => {
+  polys = [];
+  dr = null;
+  curSegs = null;
+  picked[0] = picked[1] = picked[2] = picked[3] = null;
+  LOG = [];
+  logWriteIdx = 0;
+  _lastBox.af = -2;
+  _lastBox.texts.fill("");
+  _lastBox.classes.fill("");
+  renderNow();
+  updateBoxes(0, null);
+  elResult.textContent = "";
+});
+
+elLogBtn.addEventListener("click", function() {
+  if (LOG.length === 0) {
+    this.textContent = "Log boş";
+    setTimeout(() => { elLogBtn.textContent = "Log Kopyala"; }, 1000);
+    return;
+  }
+  // If ring buffer wrapped, reorder chronologically
+  let logData;
+  if (logWriteIdx > CONFIG.LOG_MAX) {
+    const start = logWriteIdx % CONFIG.LOG_MAX;
+    logData = LOG.slice(start).concat(LOG.slice(0, start));
+  } else {
+    logData = LOG;
+  }
+  navigator.clipboard.writeText(JSON.stringify(logData)).then(() => {
+    elLogBtn.textContent = "Kopyalandı!";
+    elLogBtn.style.borderColor = "#4fa";
+    elLogBtn.style.color = "#4fa";
+    setTimeout(() => {
+      elLogBtn.textContent = "Log Kopyala";
+      elLogBtn.style.borderColor = "#333";
+      elLogBtn.style.color = "#777";
+    }, 1500);
+  });
+});
+
+// === INIT ===
+updateBoxes(0, null);
+</script>
+</body>
+</html>
