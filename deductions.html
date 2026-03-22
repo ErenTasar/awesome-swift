@@ -663,9 +663,7 @@ var UI=(function(){
     renderAll:function(){
       RowManager.populate();
       UI.updateSubtitle();
-    },
-
-    spacer:spacer
+    }
   };
 })();
 
@@ -755,6 +753,12 @@ var RowManager=(function(){
     track.style.transform="";
   }
 
+  function spacer(){
+    var s=document.createElement("div");
+    Object.assign(s.style,{width:"40px",flexShrink:"0"});
+    return s;
+  }
+
   function renderActiveRow(){
     DOM.row2Track.innerHTML="";
     DOM.row2Scroll.scrollLeft=0;
@@ -776,7 +780,7 @@ var RowManager=(function(){
         }
         DOM.row2Track.appendChild(el);
       });
-      DOM.row2Track.appendChild(UI.spacer());
+      DOM.row2Track.appendChild(spacer());
     }
   }
 
@@ -1129,14 +1133,14 @@ var Navigation=(function(){
 
 
 /* ═══════════════════════════════════════════
-   GESTURES — Touch: pull-to-add, scroll, vertical swipe
+   GESTURES — Unified touch+mouse: pull-to-add, scroll, vertical swipe
    ═══════════════════════════════════════════ */
 var Gestures=(function(){
   /*
    * Gesture state (g) fields:
    *   active           - gesture tracking is in progress
    *   pulling          - pull-to-add mode engaged
-   *   startX/startY    - initial touch position
+   *   startX/startY    - initial touch/mouse position
    *   lastX            - previous frame X (for delta calc)
    *   axis             - detected axis: "x" | "y" | null
    *   dy               - cumulative vertical delta (for swipe)
@@ -1146,6 +1150,7 @@ var Gestures=(function(){
    *   scrollStart      - scrollLeft at gesture start
    *   fromNewCardInput - gesture started on blank card's input
    *   overscroll       - edge overscroll amount (bounce effect)
+   *   mouse            - true if mouse (not touch) gesture
    */
   var g={active:false};
   var momentumRAF=null;
@@ -1305,7 +1310,7 @@ var Gestures=(function(){
     };
   }
 
-  // ── INIT: touch handler setup ──
+  // ── INIT: unified touch+mouse handler setup ──
   function init(){
     var appContainer=DOM.appContainer;
     var scrollEl=DOM.row2Scroll;
@@ -1460,6 +1465,74 @@ var Gestures=(function(){
       if(g.swiping&&!g.invalidSwipe)Navigation.endSwipe(false,g.direction);
       g={active:false};
     },{passive:true});
+
+    // ── MOUSE ──
+    appContainer.addEventListener("mousedown",function(e){
+      var fromNewCardInput=State.adding&&e.target.closest(".new-card")&&isInteractive(e.target);
+      if(!fromNewCardInput&&isInteractive(e.target)&&!e.target.closest("#addBtn"))return;
+      cancelMomentum();cancelBounce();
+      g={active:true,pulling:false,startX:e.clientX,startY:e.clientY,lastX:e.clientX,
+         axis:null,mouse:true,pullVal:0,scrollStart:scrollEl.scrollLeft,
+         fromNewCardInput:!!fromNewCardInput};
+      velocity.reset();
+      velocity.add(e.clientX);
+      if(!fromNewCardInput)e.preventDefault();
+    });
+
+    window.addEventListener("mousemove",function(e){
+      if(!g.active||!g.mouse)return;
+      var dx=e.clientX-g.startX;
+      var dy=e.clientY-g.startY;
+
+      // Blank card input → only capture horizontal swipes
+      if(g.fromNewCardInput){
+        var result=handleNewCardInputSwipe(dx,dy);
+        if(result==="captured")e.preventDefault();
+        if(result!=="captured")return;
+      }
+
+      if(!g.axis){
+        g.axis=detectAxis(dx,dy);
+        if(!g.axis)return;
+      }
+      if(g.axis!=="x")return;
+
+      velocity.add(e.clientX);
+      var frameDx=e.clientX-g.lastX;
+      g.lastX=e.clientX;
+
+      if(!g.pulling&&g.scrollStart<2&&scrollEl.scrollLeft<2&&dx>4)g.pulling=true;
+
+      if(g.pulling){applyPull(dx);}
+      else{
+        var before=scrollEl.scrollLeft;
+        scrollEl.scrollLeft-=frameDx;RowManager.syncScroll(scrollEl.scrollLeft);
+        var clamped=scrollEl.scrollLeft===before&&frameDx!==0;
+        if(clamped){
+          g.overscroll=(g.overscroll||0)+frameDx*0.5;
+          g.overscroll=Math.sign(g.overscroll)*Math.min(Math.abs(g.overscroll),80);
+          DOM.row2Track.style.transform="translateX("+g.overscroll+"px)";
+        }else if(g.overscroll){
+          g.overscroll=0;
+          DOM.row2Track.style.transform="";
+        }
+      }
+    });
+
+    window.addEventListener("mouseup",function(){
+      if(!g.active||!g.mouse)return;
+      if(g.pulling&&(g.pullVal||0)>Config.PULL_THRESHOLD){
+        commitPull(g.pullVal||0);
+      }else if(g.pulling){
+        resetVisuals();
+      }else if(g.overscroll&&Math.abs(g.overscroll)>2){
+        bounce(g.overscroll);
+      }else{
+        var v=velocity.get();
+        if(Math.abs(v)>Config.MOMENTUM_MIN)startMomentum(v);
+      }
+      g={active:false};
+    });
 
     // + button
     DOM.addBtn.addEventListener("click",function(){TodoManager.add();});
