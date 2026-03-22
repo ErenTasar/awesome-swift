@@ -676,6 +676,7 @@ var UI=(function(){
 var RowManager=(function(){
   var SCALE=0.75;
   var PARALLAX=0.75;
+  var PARALLAX_TASKS=0.12;
   var ROW_GAP=16;
   var PASSIVE_OPACITY=0.5;
   var MASK_UP="linear-gradient(to top, rgba(0,0,0,0.3) 10%, transparent 85%)";
@@ -819,8 +820,9 @@ var RowManager=(function(){
   }
 
   function syncScroll(row2Left){
-    var target1=row2Left*PARALLAX;
-    var target3=row2Left*PARALLAX;
+    var p=State.view==="tasks"?PARALLAX_TASKS:PARALLAX;
+    var target1=row2Left*p;
+    var target3=row2Left*p;
 
     // Boundary deceleration: Row 1
     var parent1=DOM.row1Track.parentElement;
@@ -849,7 +851,7 @@ var RowManager=(function(){
   function bounce(overscrollPx){
     var dur=580;
     var ease="cubic-bezier(.25,1.05,.5,.98)";
-    var p=PARALLAX;
+    var p=State.view==="tasks"?PARALLAX_TASKS:PARALLAX;
     [DOM.row1Track,DOM.row3Track].forEach(function(track){
       if(!track||!track.firstChild)return;
       var cur=track.style.transform;
