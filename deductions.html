@@ -964,199 +964,142 @@ var Navigation=(function(){
   var currentAnim=null;
   var transitioning=false;
   var EASE="cubic-bezier(.25,1,.5,1)";
-  var TRANSITION_DUR=300;
 
   var swipeTargetCategory=null;
   var savedLastCategory=null;
   var savedCategoryScroll=0;
-  var swipeGen=0;
-  var viewReady=true;
+  var swipeCommitted=false;
 
   function cleanup(){
     if(currentAnim){
       currentAnim.forEach(function(a){try{a.cancel();}catch(e){}});
       currentAnim=null;
     }
-    // Swipe snapshot temizliği
-    if(startSwipe._snapshot){
-      startSwipe._snapshot.remove();
-      startSwipe._snapshot=null;
-    }
-    // Orphan snapshot'ları temizle (animateTransition'dan kalan klonlar)
-    var children=DOM.appContainer.children;
-    for(var i=children.length-1;i>=0;i--){
-      var ch=children[i];
-      if(ch!==DOM.contentBlock&&ch.style.zIndex==="10"){
-        ch.remove();
-      }
-    }
     DOM.contentBlock.style.opacity="1";
     DOM.contentBlock.style.transform="none";
     transitioning=false;
-    viewReady=true;
+    swipeCommitted=false;
   }
 
   function updateHeader(){
     DOM.viewTitle.textContent=State.view==="categories"?"Kategoriler":State.currentCategory.text;
   }
 
-  // ── Tap ile geçiş: crossfade + slide ──
-  function animateTransition(direction,prepareState){
-    if(transitioning)return;
-    transitioning=true;
-    cleanup();
+  function applyNewState(direction){
+    if(direction==="up"){
+      var cat=swipeTargetCategory||State.lastCategory;
+      savedCategoryScroll=DOM.row2Scroll.scrollLeft;
+      State.view="tasks";State.currentCategory=cat;State.lastCategory=cat;
+    }else{
+      State.view="categories";State.currentCategory=null;
+    }
+    updateHeader();
+    UI.renderAll();
+    if(direction==="down"){
+      DOM.row2Scroll.scrollLeft=savedCategoryScroll;
+      RowManager.syncScroll(savedCategoryScroll);
+    }
+  }
 
+  function revertState(direction){
+    if(direction==="up"){
+      State.view="categories";State.currentCategory=null;
+      if(savedLastCategory!==undefined)State.lastCategory=savedLastCategory;
+    }else{
+      State.view="tasks";State.currentCategory=State.lastCategory;
+    }
+    updateHeader();
+    UI.renderAll();
+    if(direction==="up"){
+      DOM.row2Scroll.scrollLeft=savedCategoryScroll;
+      RowManager.syncScroll(savedCategoryScroll);
+    }
+  }
+
+  // ── Tap: fade-out → rebuild → fade-in (snapshot yok) ──
+  function animateTransition(direction,cat){
+    if(transitioning)return;
+    cleanup();
+    transitioning=true;
+    swipeTargetCategory=cat||null;
     var sign=direction==="down"?1:-1;
 
-    // Snapshot oluştur (mevcut görünümün klonu)
-    var snapshot=DOM.contentBlock.cloneNode(true);
-    snapshot.style.pointerEvents="none";
-    snapshot.style.zIndex="10";
-    snapshot.style.willChange="opacity,transform";
-    DOM.appContainer.appendChild(snapshot);
-
-    // State'i güncelle ve yeni içeriği render et
-    prepareState();
-
-    // Eski içerik: slide out + fade out
-    var sA=snapshot.animate([
+    var fadeOut=DOM.contentBlock.animate([
       {opacity:1,transform:"translate3d(0,0,0)"},
-      {opacity:0,transform:"translate3d(0,"+(sign*30)+"px,0)"}
-    ],{duration:TRANSITION_DUR,easing:EASE,fill:"forwards"});
+      {opacity:0,transform:"translate3d(0,"+(sign*15)+"px,0)"}
+    ],{duration:150,easing:EASE});
 
-    // Yeni içerik: slide in + fade in
-    var bA=DOM.contentBlock.animate([
-      {opacity:0,transform:"translate3d(0,"+(-sign*12)+"px,0)"},
-      {opacity:1,transform:"translate3d(0,0,0)"}
-    ],{duration:TRANSITION_DUR,easing:EASE,fill:"forwards"});
-
-    currentAnim=[sA,bA];
-    sA.onfinish=function(){
-      snapshot.remove();
-      cleanup();
+    currentAnim=[fadeOut];
+    fadeOut.onfinish=function(){
+      applyNewState(direction);
+      var fadeIn=DOM.contentBlock.animate([
+        {opacity:0,transform:"translate3d(0,"+(-sign*10)+"px,0)"},
+        {opacity:1,transform:"translate3d(0,0,0)"}
+      ],{duration:200,easing:EASE});
+      currentAnim=[fadeIn];
+      fadeIn.onfinish=function(){cleanup();};
     };
   }
 
-  // ── Progressive swipe ──
+  // ── Swipe: progress ile doğrudan opacity kontrol (snapshot yok) ──
   function startSwipe(direction,targetCategory){
     cleanup();
     transitioning=true;
     savedLastCategory=State.lastCategory;
     swipeTargetCategory=targetCategory||null;
-    swipeGen++;
-    var myGen=swipeGen;
-    viewReady=false;
-    var sign=direction==="down"?1:-1;
-
-    // Snapshot oluştur
-    var snapshot=DOM.contentBlock.cloneNode(true);
-    snapshot.style.pointerEvents="none";
-    snapshot.style.zIndex="10";
-    snapshot.style.willChange="opacity,transform";
-    DOM.appContainer.appendChild(snapshot);
-    startSwipe._snapshot=snapshot;
-
-    // Yeni içeriği hazırla (gizli)
-    DOM.contentBlock.style.opacity="0";
-    DOM.contentBlock.style.transform="translate3d(0,"+(-sign*12)+"px,0)";
-
-    requestAnimationFrame(function(){
-      if(swipeGen!==myGen)return;
-      // State'i güncelle
-      if(direction==="down"){
-        State.view="categories";State.currentCategory=null;
-        updateHeader();
-        UI.renderAll();
-        DOM.row2Scroll.scrollLeft=savedCategoryScroll;
-        RowManager.syncScroll(savedCategoryScroll);
-      }else{
-        savedCategoryScroll=DOM.row2Scroll.scrollLeft;
-        var cat=swipeTargetCategory||State.lastCategory;
-        State.view="tasks";State.currentCategory=cat;State.lastCategory=cat;
-        updateHeader();
-        UI.renderAll();
-      }
-      viewReady=true;
-    });
+    swipeCommitted=false;
   }
 
   function updateSwipe(progress,direction){
-    var snapshot=startSwipe._snapshot;
-    if(!snapshot)return;
     var p=Math.min(progress,1);
     var sign=direction==="down"?1:-1;
 
-    // Snapshot: fade out + slide
-    var snapP=Math.min(p/0.7,1);
-    snapshot.style.opacity=String(1-snapP);
-    snapshot.style.transform="translate3d(0,"+(sign*snapP*30)+"px,0)";
-
-    // Content: gecikmeli giriş
-    if(viewReady){
-      var contentP=Math.max(0,Math.min((p-0.10)/0.90,1));
-      DOM.contentBlock.style.opacity=String(contentP);
-      DOM.contentBlock.style.transform="translate3d(0,"+(-sign*(1-contentP)*12)+"px,0)";
+    if(p<0.5){
+      // İlk yarı: eski içerik fade-out
+      DOM.contentBlock.style.opacity=String(1-p*2);
+      DOM.contentBlock.style.transform="translate3d(0,"+(sign*p*20)+"px,0)";
+    }else{
+      // p>=0.5: rebuild yap (opacity zaten ~0)
+      if(!swipeCommitted){
+        swipeCommitted=true;
+        DOM.contentBlock.style.opacity="0";
+        applyNewState(direction);
+      }
+      // İkinci yarı: yeni içerik fade-in
+      var inP=(p-0.5)/0.5;
+      DOM.contentBlock.style.opacity=String(inP);
+      DOM.contentBlock.style.transform="translate3d(0,"+(-sign*(1-inP)*10)+"px,0)";
     }
   }
 
   function endSwipe(commit,direction){
-    var snapshot=startSwipe._snapshot;
-    if(!snapshot){cleanup();return;}
-    var sign=direction==="down"?1:-1;
-    var b=DOM.contentBlock;
-    var sOp=snapshot.style.opacity||"1";
-    var sTr=snapshot.style.transform||"none";
-    var bOp=b.style.opacity||"0";
-    var bTr=b.style.transform||"none";
-
     if(commit){
-      var sA=snapshot.animate([
-        {opacity:sOp,transform:sTr},
-        {opacity:0,transform:"translate3d(0,"+(sign*30)+"px,0)"}
-      ],{duration:150,easing:EASE,fill:"forwards"});
-
-      var bA=b.animate([
+      if(!swipeCommitted){
+        swipeCommitted=true;
+        DOM.contentBlock.style.opacity="0";
+        applyNewState(direction);
+      }
+      var bOp=DOM.contentBlock.style.opacity||"0";
+      var bTr=DOM.contentBlock.style.transform||"none";
+      var bA=DOM.contentBlock.animate([
         {opacity:bOp,transform:bTr},
         {opacity:1,transform:"translate3d(0,0,0)"}
-      ],{duration:150,easing:EASE,fill:"forwards"});
-
-      currentAnim=[sA,bA];
-      sA.onfinish=function(){
-        snapshot.remove();
-        startSwipe._snapshot=null;
-        cleanup();
-      };
+      ],{duration:150,easing:EASE});
+      currentAnim=[bA];
+      bA.onfinish=function(){cleanup();};
     }else{
-      // İptal: eski görünüme geri dön
-      var sA=snapshot.animate([
-        {opacity:sOp,transform:sTr},
-        {opacity:1,transform:"translate3d(0,0,0)"}
-      ],{duration:180,easing:EASE,fill:"forwards"});
-
-      var bA=b.animate([
+      // İptal: state rebuild olduysa geri al
+      if(swipeCommitted){
+        revertState(direction);
+      }
+      var bOp=DOM.contentBlock.style.opacity||"1";
+      var bTr=DOM.contentBlock.style.transform||"none";
+      var bA=DOM.contentBlock.animate([
         {opacity:bOp,transform:bTr},
-        {opacity:0,transform:"translate3d(0,"+(-sign*12)+"px,0)"}
-      ],{duration:180,easing:EASE,fill:"forwards"});
-
-      currentAnim=[sA,bA];
-      bA.onfinish=function(){
-        // Eski state'e geri dön
-        if(direction==="down"){
-          State.view="tasks";State.currentCategory=State.lastCategory;
-          updateHeader();
-          UI.renderAll();
-        }else{
-          State.view="categories";State.currentCategory=null;
-          if(savedLastCategory!==undefined)State.lastCategory=savedLastCategory;
-          updateHeader();
-          UI.renderAll();
-          DOM.row2Scroll.scrollLeft=savedCategoryScroll;
-          RowManager.syncScroll(savedCategoryScroll);
-        }
-        snapshot.remove();
-        startSwipe._snapshot=null;
-        cleanup();
-      };
+        {opacity:1,transform:"translate3d(0,0,0)"}
+      ],{duration:180,easing:EASE});
+      currentAnim=[bA];
+      bA.onfinish=function(){cleanup();};
     }
   }
 
@@ -1171,26 +1114,8 @@ var Navigation=(function(){
   }
 
   return {
-    goToTasks:function(cat){
-      animateTransition("up",function(){
-        savedCategoryScroll=DOM.row2Scroll.scrollLeft;
-        State.view="tasks";
-        State.currentCategory=cat;
-        State.lastCategory=cat;
-        updateHeader();
-        UI.renderAll();
-      });
-    },
-    goToCategories:function(){
-      animateTransition("down",function(){
-        State.view="categories";
-        State.currentCategory=null;
-        updateHeader();
-        UI.renderAll();
-        DOM.row2Scroll.scrollLeft=savedCategoryScroll;
-        RowManager.syncScroll(savedCategoryScroll);
-      });
-    },
+    goToTasks:function(cat){animateTransition("up",cat);},
+    goToCategories:function(){animateTransition("down");},
     startSwipe:startSwipe,
     updateSwipe:updateSwipe,
     endSwipe:endSwipe,
@@ -1521,7 +1446,7 @@ var Gestures=(function(){
       }
 
       // Vertical finalize
-      if(g.swiping){
+      if(g.swiping&&!g.invalidSwipe){
         var progress=Math.min(Math.abs(g.dy)/200,1);
         Navigation.endSwipe(progress>0.2,g.direction);
       }
@@ -1531,7 +1456,7 @@ var Gestures=(function(){
 
     appContainer.addEventListener("touchcancel",function(){
       if(g.pulling)resetVisuals();
-      if(g.swiping)Navigation.endSwipe(false,g.direction);
+      if(g.swiping&&!g.invalidSwipe)Navigation.endSwipe(false,g.direction);
       g={active:false};
     },{passive:true});
 
