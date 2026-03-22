@@ -988,12 +988,14 @@ var Navigation=(function(){
   }
 
   function updateHeader(){
-    DOM.viewTitle.textContent=State.view==="categories"?"Kategoriler":State.currentCategory.text;
+    DOM.viewTitle.textContent=State.view==="categories"?"Kategoriler"
+      :(State.currentCategory?State.currentCategory.text:"");
   }
 
   function applyNewState(direction){
     if(direction==="up"){
       var cat=swipeTargetCategory||State.lastCategory;
+      if(!cat)return;
       savedCategoryScroll=DOM.row2Scroll.scrollLeft;
       State.view="tasks";State.currentCategory=cat;State.lastCategory=cat;
     }else{
