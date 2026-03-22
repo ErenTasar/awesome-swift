@@ -207,7 +207,8 @@ var Layout=(function(){
 
   function init(){
     DOM.appContainer.style.height=initialHeight+"px";
-    fixedTop=Math.max(40,Math.round(initialHeight*0.38-Config.CONTENT_HEIGHT/2));
+    var vh=window.visualViewport?window.visualViewport.height:initialHeight;
+    fixedTop=Math.max(40,Math.round(vh*0.38-Config.CONTENT_HEIGHT/2));
     DOM.contentBlock.style.top=fixedTop+"px";
     RowManager.position(fixedTop);
 
@@ -1174,7 +1175,7 @@ var Gestures=(function(){
 
   function resetVisuals(){
     var cur=DOM.row2Track.style.transform;
-    DOM.track.style.transition="none";
+    DOM.row2Track.style.transition="none";
     DOM.row2Track.style.transform="";
     if(cur&&cur!=="none"){
       DOM.row2Track.animate([
@@ -1203,7 +1204,7 @@ var Gestures=(function(){
   function applyPull(dx){
     g.pullVal=dampedPull(Math.max(0,dx));
     DOM.row2Track.style.transform="translateX("+g.pullVal+"px)";
-    DOM.track.style.transition="none";
+    DOM.row2Track.style.transition="none";
     updateIndicator(g.pullVal);
   }
 
