@@ -676,7 +676,7 @@ var UI=(function(){
 var RowManager=(function(){
   var SCALE=0.75;
   var PARALLAX=0.75;
-  var PARALLAX_TASKS=0.12;
+  var taskParallaxBase=0;
   var ROW_GAP=16;
   var PASSIVE_OPACITY=0.5;
   var MASK_UP="linear-gradient(to top, rgba(0,0,0,0.3) 10%, transparent 85%)";
@@ -783,6 +783,8 @@ var RowManager=(function(){
 
   function populate(){
     if(State.view==="categories"){
+      taskParallaxBase=0;
+
       // Row 1: gizli
       hideRow(DOM.row1Wrap);
 
@@ -815,14 +817,42 @@ var RowManager=(function(){
         Navigation.goToCategories();
       }));
       stylePassive(DOM.row3Wrap,"down");
+
+      // row1 base offset: aktif kategorinin miniCard'ını aynı ekran konumunda tut
+      var catIndex=State.categories.indexOf(State.currentCategory);
+      if(catIndex>=0){
+        var miniSlot=Math.round(Config.W*SCALE)+9; // miniCard width + row1Track gap
+        var miniCardX=catIndex*miniSlot;
+        var catScreenX=catIndex*Config.SLOT-savedCategoryScroll;
+        taskParallaxBase=Math.max(0,miniCardX-catScreenX-5); // 5px = padding farkı (20-15)
+      }else{
+        taskParallaxBase=0;
+      }
     }
     syncScroll(DOM.row2Scroll.scrollLeft);
   }
 
   function syncScroll(row2Left){
-    var p=State.view==="tasks"?PARALLAX_TASKS:PARALLAX;
-    var target1=row2Left*p;
-    var target3=row2Left*p;
+    if(State.view==="tasks"){
+      // Dinamik parallax: task sayısı ne olursa olsun toplam kayma ≤ yarım miniCard
+      var row2Max=DOM.row2Track.scrollWidth-DOM.row2Scroll.clientWidth;
+      var maxDisp=Math.round(Config.W*SCALE)*0.4;
+      var p=row2Max>0?maxDisp/row2Max:0;
+
+      var target1=taskParallaxBase+row2Left*p;
+      var parent1=DOM.row1Track.parentElement;
+      if(parent1){
+        var max1=DOM.row1Track.scrollWidth-parent1.clientWidth;
+        if(max1>0)target1=Math.min(target1,max1);
+      }
+      DOM.row1Track.style.transform="translateX("+(-target1)+"px)";
+      DOM.row3Track.style.transform="translateX("+(-row2Left*p)+"px)";
+      return;
+    }
+
+    // Categories view — orijinal parallax
+    var target1=row2Left*PARALLAX;
+    var target3=row2Left*PARALLAX;
 
     // Boundary deceleration: Row 1
     var parent1=DOM.row1Track.parentElement;
@@ -851,7 +881,14 @@ var RowManager=(function(){
   function bounce(overscrollPx){
     var dur=580;
     var ease="cubic-bezier(.25,1.05,.5,.98)";
-    var p=State.view==="tasks"?PARALLAX_TASKS:PARALLAX;
+    var p;
+    if(State.view==="tasks"){
+      var row2Max=DOM.row2Track.scrollWidth-DOM.row2Scroll.clientWidth;
+      var maxDisp=Math.round(Config.W*SCALE)*0.4;
+      p=row2Max>0?maxDisp/row2Max:0;
+    }else{
+      p=PARALLAX;
+    }
     [DOM.row1Track,DOM.row3Track].forEach(function(track){
       if(!track||!track.firstChild)return;
       var cur=track.style.transform;
