@@ -18,12 +18,37 @@ enforceable, plus a third that is honestly not:
                           guarantee is not oversold.
 
 What this still cannot stop: citing a real source and a real-but-irrelevant
-quote from it, or distorting the quote's meaning in the claim text. Only the
-(fallible) judge addresses those, and only as well as the judge is calibrated.
+*whole sentence* from it, or distorting its meaning in the claim's own wording.
+Only the (fallible) judge addresses those, and only as well as it is calibrated.
+(The whole-sentence rule below does close the sharpest mechanical trick a
+red-team found: quoting a verbatim sub-span that drops a leading negation.)
 """
+
+import re
 
 from forcing_function.constrained_decode import (
     ForcingDecoder, NeedsProvenance, IllegalAction)
+
+# A quote, by default, must be a run of WHOLE sentences from the source. This
+# closes the sharpest verbatim-but-deceptive trick: slicing a sub-span that drops
+# a leading negation ("...not guilty on all counts." -> "guilty on all counts.").
+# An arbitrary substring is still verbatim, so without this an attacker can
+# reverse the source's meaning while passing an exact-match check.
+_SENTENCE = re.compile(r"\S.*?[.!?](?=\s|$)", re.S)
+
+
+def _sentence_run(body, quote):
+    """True iff `quote` starts at a sentence start and ends at a sentence end in
+    `body` (one or more consecutive whole sentences)."""
+    spans = [(m.start(), m.end()) for m in _SENTENCE.finditer(body)]
+    starts = {s for s, _ in spans}
+    ends = {e for _, e in spans}
+    idx = body.find(quote)
+    while idx != -1:
+        if idx in starts and idx + len(quote) in ends:
+            return True
+        idx = body.find(quote, idx + 1)
+    return False
 
 
 class UnresolvableSource(NeedsProvenance):
@@ -49,11 +74,17 @@ class SourcePool:
         return self.sources.get(sid)
 
 
-def emit_grounded(d, pool, cid, text, src, quote, key=None, rels=(), judge=None):
+def emit_grounded(d, pool, cid, text, src, quote, key=None, rels=(), judge=None,
+                  whole_sentence=True):
     """Like ForcingDecoder.emit, but the source must resolve to `pool` and the
     `quote` must be a verbatim span of it. Optional `judge(claim_text, quote) ->
     bool` adds the (fallible) faithfulness gate. Atomic: refusal leaves state
-    untouched, because every check runs before the underlying emit()."""
+    untouched, because every check runs before the underlying emit().
+
+    `whole_sentence` (default True) additionally requires the quote to be a run
+    of whole sentences, so a sub-span cannot drop a leading negation. Set it
+    False to allow mid-sentence fragments — more flexible, but it re-opens the
+    sub-span distortion trick, so only the judge stands between you and it."""
     # Tier 1 — resolvable: invented sources are impossible.
     body = pool.text(src)
     if body is None:
@@ -65,6 +96,11 @@ def emit_grounded(d, pool, cid, text, src, quote, key=None, rels=(), judge=None)
     if quote not in body:
         raise FabricatedQuote(
             f"quote {quote!r} does not appear verbatim in source {src!r}")
+    # Tier 2b — whole-sentence: a sub-span cannot strip a negation or context.
+    if whole_sentence and not _sentence_run(body, quote):
+        raise FabricatedQuote(
+            f"quote {quote!r} is a partial span; it must be whole sentence(s) "
+            f"of source {src!r} (else a sub-span could reverse its meaning)")
     # Tier 3 — faithful: semantic, hence a fallible judge, not a guarantee.
     if judge is not None and not judge(text, quote):
         raise UnfaithfulCitation(
