@@ -72,6 +72,15 @@ class IllegalAction(Exception):
     """Raised if a caller bypasses legal_types() and applies a masked action."""
 
 
+class NeedsProvenance(IllegalAction):
+    """The model tried to finalize a claim with no non-empty source."""
+
+
+class NeedsReconciliation(IllegalAction):
+    """The model tried to finalize a claim that conflicts with an earlier one
+    (same key) without an explicit reconciling edge."""
+
+
 class ForcingDecoder:
     """Drives constrained generation. The model only ever sees legal types."""
 
@@ -154,6 +163,32 @@ class ForcingDecoder:
                 st.seen_keys.add(c.key)
             st.cur = None
         return self.state
+
+    # --- ergonomic entry point for a real model in the loop -----------------
+    def emit(self, cid, text, src=None, key=None, rels=()):
+        """Finalize one claim, or refuse. This is what a real model calls: it
+        passes what it wants to assert, and the forcing function either returns
+        the finalized Claim or raises until the model supplies what is missing.
+        Atomic — on refusal the decoder state is left untouched."""
+        st = self.state
+        if not text:
+            raise IllegalAction("text required")
+        if not src:
+            raise NeedsProvenance(f"claim {cid!r} needs a non-empty source")
+        if key in st.seen_keys and not any(
+                rt in RECONCILERS and tgt in st.ids for rt, tgt in rels):
+            raise NeedsReconciliation(
+                f"claim {cid!r} reuses key {key!r}; needs a reconciling edge "
+                f"({'/'.join(sorted(RECONCILERS))}) to one of {sorted(st.ids)}")
+        self.apply(START)
+        self.apply(TEXT, text)
+        if key:
+            self.apply(KEY, key)
+        for r in rels:
+            self.apply(REL, r)
+        self.apply(SRC, src)
+        self.apply(CLOSE, cid)
+        return st.output[-1]
 
     # --- driver -------------------------------------------------------------
     def generate(self, model):

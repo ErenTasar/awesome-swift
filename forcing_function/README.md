@@ -42,13 +42,31 @@ This is precisely where off-the-shelf grammar/structured-output engines stop.
 
 ## Files
 
-- `constrained_decode.py` — a model-agnostic stateful decoder. Given any token
-  scorer (a real LLM's logits, or the adversarial mock in the tests), it masks
-  illegal next-tokens so the two constraints hold by construction.
+- `constrained_decode.py` — a model-agnostic stateful decoder. Masks illegal
+  next-actions so the two constraints hold by construction. `emit()` is the
+  ergonomic entry point a real model calls: it returns a finalized claim, or
+  *refuses* (`NeedsProvenance` / `NeedsReconciliation`) until the gap is filled.
 - `grammar.gbnf` — the context-free (provenance) half, deployable with llama.cpp.
-- `test_forcing_function.py` — proves the property: an adversarial "model" that
-  *always tries* to skip the source / skip the reconciliation is structurally
-  unable to, and valid documents still generate fine.
+- `models.py` — toy proposers (adversarial / cooperative) that stand in for an LLM.
+- `demo.py` — a narrated run showing the mask block the adversary's shortcuts.
+- `claude_in_the_loop.py` — a real model in the loop at the *action* level.
+- `test_forcing_function.py` — proves the property.
+
+## Connecting a real model
+
+The Anthropic API exposes no logits, so a model cannot be masked at the *token*
+level. It connects at the *action* level instead: the model calls `emit()` with
+what it wants to assert, and the call is refused until the claim carries a
+non-empty source and (on a conflict) an explicit reconciling edge. At claim
+granularity this gives the same guarantee as token masking — an unsourced or
+unreconciled claim is never finalized. See `claude_in_the_loop.py`:
+
+```
+PYTHONPATH=. python3 forcing_function/claude_in_the_loop.py
+```
+
+The token-level path (logit masking) works today only with an open-weights model
+via `grammar.gbnf` + llama.cpp, for the context-free provenance half.
 
 ## Run
 

@@ -108,3 +108,28 @@ def test_cooperative_model_generates_a_valid_document():
     claims = ForcingDecoder().generate(CooperativeModel(plan))
     assert [c.id for c in claims] == ["a1", "a2"]
     assert claims[1].rels == [("supersedes", "a1")]
+
+
+# --- emit(): the ergonomic in-the-loop entry point --------------------------
+
+def test_emit_refuses_a_claim_without_a_source():
+    d = ForcingDecoder()
+    with pytest.raises(IllegalAction):
+        d.emit(cid="c1", text="a fact", key="k")           # no src
+    assert d.state.output == []                            # atomic: nothing kept
+
+
+def test_emit_refuses_an_unreconciled_conflict():
+    d = ForcingDecoder()
+    d.emit(cid="c1", text="5h", src="who", key="hl")
+    with pytest.raises(IllegalAction):
+        d.emit(cid="c2", text="3h", src="smith", key="hl")  # conflict, no edge
+    assert [c.id for c in d.state.output] == ["c1"]          # atomic
+
+
+def test_emit_succeeds_when_requirements_are_met():
+    d = ForcingDecoder()
+    d.emit(cid="c1", text="5h", src="who", key="hl")
+    c2 = d.emit(cid="c2", text="3h", src="smith", key="hl",
+                rels=[("supersedes", "c1")])
+    assert c2.rels == [("supersedes", "c1")]
