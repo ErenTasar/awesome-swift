@@ -1,137 +1,94 @@
-# Forcing Function
+# Citation Ledger
 
-The one idea worth keeping from the AIDF experiment.
+The one idea worth keeping from the AIDF experiment, trimmed to what actually
+earns its place when you talk to a model through an **API** (no logit access).
 
 ## What this is
 
-A **decode-time forcing function**: a constrained-generation guardrail that makes
-an *invalid* model output **un-emittable by construction**, rather than caught by a
-validator after the fact. The decoder masks the tokens that would violate the
-constraint, so the model literally cannot produce a forbidden sequence.
+A small, non-bypassable surface for recording **cited claims**. A model proposes
+a claim; the ledger records it only if the claim is bound to a real source and a
+verbatim quote, conflicting claims are explicitly reconciled, and (optionally) a
+judge with full context accepts it. An ungrounded or unreconciled claim is never
+recorded — there is no other path to record one.
 
-Two constraints are enforced here:
+```python
+from forcing_function.grounded import SourcePool, GroundedDecoder
 
-1. **Provenance** — a claim cannot be *finalized* until it carries a non-empty
-   source. You cannot emit a bare assertion.
-2. **Reconciliation** — if a claim re-uses a `key` already asserted by an earlier
-   claim (i.e. it conflicts), it cannot be finalized until it also emits an
-   explicit reconciliation edge (`contradicts` / `supersedes` / `refines`) to a
-   resolvable prior claim. You cannot silently store two conflicting facts.
-
-## Why this is the only part that survives
-
-The full AIDF format does not earn its place: for any structure-rich domain a
-purpose-built representation already wins (Akoma Ntoso for legislation, an ontology
-+ reasoner for conflict detection), and for structure-poor content it degrades to a
-thin wrapper. What is *not* redundant is this generation-time guardrail — and it is
-~200 lines, not an 11-section format spec.
-
-## The interesting technical split
-
-| constraint     | class            | expressible as a plain grammar? |
-|----------------|------------------|---------------------------------|
-| provenance     | context-free     | **yes** — see `grammar.gbnf`    |
-| reconciliation | context-sensitive| **no** — needs runtime state    |
-
-The provenance half is a context-free constraint, so it can be expressed as a GBNF
-grammar usable directly with llama.cpp (or any CFG-constrained decoder). The
-reconciliation half depends on *what was emitted earlier in the same document*
-(which keys have been seen), which a context-free grammar cannot express. That half
-requires a **stateful logit mask** — the thing `constrained_decode.py` demonstrates.
-This is precisely where off-the-shelf grammar/structured-output engines stop.
-
-## Files
-
-- `constrained_decode.py` — a model-agnostic stateful decoder. Masks illegal
-  next-actions so the two constraints hold by construction. `emit()` is the
-  ergonomic entry point a real model calls: it returns a finalized claim, or
-  *refuses* (`NeedsProvenance` / `NeedsReconciliation`) until the gap is filled.
-- `grammar.gbnf` — the context-free (provenance) half, deployable with llama.cpp.
-- `models.py` — toy proposers (adversarial / cooperative) that stand in for an LLM.
-- `demo.py` — a narrated run showing the mask block the adversary's shortcuts.
-- `claude_in_the_loop.py` — a real model in the loop at the *action* level.
-- `test_forcing_function.py` — proves the property.
-
-## Connecting a real model
-
-The Anthropic API exposes no logits, so a model cannot be masked at the *token*
-level. It connects at the *action* level instead: the model calls `emit()` with
-what it wants to assert, and the call is refused until the claim carries a
-non-empty source and (on a conflict) an explicit reconciling edge. At claim
-granularity this gives the same guarantee as token masking — an unsourced or
-unreconciled claim is never finalized. See `claude_in_the_loop.py`:
-
-```
-PYTHONPATH=. python3 forcing_function/claude_in_the_loop.py
+pool = SourcePool({"label-2021": "Veltan reduces the relapse rate by 40% in adults. ..."})
+gd = GroundedDecoder(pool)
+gd.cite(cid="k1",
+        text="Veltan reduces relapse by 40%.",
+        src="label-2021",
+        quote="Veltan reduces the relapse rate by 40% in adults.")   # must be verbatim
 ```
 
-The token-level path (logit masking) works today only with an open-weights model
-via `grammar.gbnf` + llama.cpp, for the context-free provenance half.
+`cite()` raises unless `src` is a real pool id and `quote` is an exact substring
+of that source; conflicting claims (shared `key`) raise until given a reconciling
+edge.
 
-## Run
+## Why it is this small
 
-```
-PYTHONPATH=. pytest forcing_function/test_forcing_function.py -q
-```
+Earlier versions carried a token-mask "decoder" (the software analogue of masking
+logits) plus a GBNF grammar and demos. But over an API there are no logits to
+mask, so that machine was validation in disguise — and a cross-model A/B eval
+(Opus / Sonnet / Haiku, grounded vs. free-form) showed `cite()` delivers the
+identical, measurable value in a fraction of the code. So the mask machine, the
+grammar and the demos were deleted. What the eval actually credited remains:
 
-## Grounding layer (`grounded.py`): two primitives, nothing in between
+- machine-verifiable citations (every quote is provably verbatim), and
+- explicit reconciliation of conflicting facts (the shared-`key` → edge rule).
 
-An earlier version of this layer grew a middle of half-mechanical heuristics
-(whole-sentence, grounded-words, negation-parity). A pentest showed each was both
-*unsound* (abbreviation sentence-splits, qualifier omission, off-list polarity
-words all bypassed it) and *incomplete* (the residue never ends — every new
-polarity word or omission pattern needs another rule). Chasing meaning with
-wordlists is a losing, never-ending game, so that middle was **deleted**. Two
-clean primitives remain:
+What the eval did **not** credit, stated honestly: with a strong, careful model
+the grounded mode produced **no accuracy gain** over a free-form answer that was
+already asked to cite. The value here is *auditability and conflict-surfacing*,
+not making a capable model more correct. (It did keep a weaker model on-rails in
+one run, but that is confounded with the task being framed as a coding task.)
 
-**1. Mechanical provenance integrity — finite and sound.** `emit_grounded()` /
-`GroundedDecoder.cite()` enforce, unconditionally:
+## The three guarantees
+
+**1. Mechanical provenance integrity — finite and sound.**
 
 | check | defeats |
 |-------|---------|
 | resolvable `src` (an id in the `SourcePool`) | invented sources |
 | verbatim `quote` (exact substring of that source) | fabricated quotes |
 | tamper-evident (sha256 `src_hash`, `reverify()` fails closed) | post-hoc edits |
-| trusted origin (link in an allowlist, fails closed) | unaccountable sources |
+| trusted origin (`require_trusted_link` + allowlist, fails closed) | unaccountable sources |
 | `extractive=True` (claim text == quote) | the paraphrase channel |
 
-These are exact, bounded checks — no wordlists, no sentence regex, nothing to
-keep patching.
+**2. Reconciliation.** A claim that reuses a prior `key` cannot be recorded
+without an explicit `contradicts` / `supersedes` / `refines` edge to an existing
+claim. You cannot silently store two conflicting facts.
 
-**2. Semantic faithfulness — one fallible judge, with full context.** Everything
+**3. Semantic faithfulness — one fallible judge, with full context.** Everything
 about *meaning* — omission, cherry-picking a sentence while dropping its
 qualifier, relation reversal, polarity — is decided by a single
-`judge(claim, quote, source)` that is handed the **entire source**. A judge that
-sees the whole document can catch what no local mechanical rule could; it is
-fallible, and that is stated plainly rather than papered over with heuristics.
+`judge(claim, quote, source)` handed the **entire source**. A judge that sees the
+whole document can catch what no local mechanical rule could; it is fallible, and
+that is stated plainly rather than papered over with heuristics.
 
-The split is the whole point: **form is provable, meaning is judged.**
-well-formedness, not truth. `GroundedDecoder` is the non-bypassable surface — it
-exposes only `cite()`, so there is no ungrounded `emit()` path to forget.
+The split is the point: **form is provable, meaning is judged.** well-formedness,
+not truth. Trust still bottoms out at "who curates the pool / the allowlist" —
+that bottom is irreducible (every chain of trust ends at a root you choose); the
+ledger makes it explicit and accountable rather than pretending to remove it.
 
-Trust still bottoms out at "who curates the pool / the trusted-domain allowlist."
-That bottom is irreducible (every chain of trust ends at a root you choose); the
-layer makes it *explicit and accountable* rather than pretending to remove it.
+## Files
 
-## Prior art (and why this is a real gap)
+- `grounded.py` — the whole thing: `SourcePool`, `GroundedDecoder.cite()`,
+  `reverify()`, the `Claim` record, the error types.
+- `test_grounded.py` — the guarantees as tests (`PYTHONPATH=. pytest forcing_function/`).
+- `eval_treatment*.py` — the A/B eval scripts (Opus / Sonnet / Haiku) used to
+  decide what to keep; kept as evidence.
 
-A survey of constrained-decoding engines (GBNF/llama.cpp, Outlines, Guidance,
-XGrammar, lm-format-enforcer, OpenAI/Anthropic structured outputs), citation
-methods (RARR, ALCE, GraphRAG, Perplexity/Gemini), and provenance schemas
-(nanopublications, PROV-O, RDF-star, Akoma Ntoso) found the pieces exist
-separately but the exact combination does not:
+## Prior art (why the citation+reconciliation pairing is a real gap)
 
-- Grammar/structured-output engines enforce *structure*, not semantics. They can
-  require a `source` **key** to exist but not that its value is non-empty or
-  resolvable — OpenAI Structured Outputs explicitly drops `minLength`/`pattern`,
-  pushing that check to post-hoc validation. Here the non-empty + resolvable
-  checks live *in the mask*.
-- Citation/attribution methods (RARR, ALCE, GraphRAG) produce or *evaluate*
-  citations; none make an unsourced claim **un-emittable** at decode time.
-- Decode-time **conflict reconciliation** — refusing to emit two conflicting
-  claims until an explicit edge is present — appears to exist nowhere; the
-  contradiction literature is all post-hoc benchmarks.
-
-So the defensible contribution is narrow and specific: moving the
-provenance-and-reconciliation binding from validation-time into the decoder's
-masking loop, with resolvability checked as part of the mask.
+A survey of constrained-decoding engines (Outlines, Guidance, XGrammar,
+lm-format-enforcer, OpenAI/Anthropic structured outputs), citation methods (RARR,
+ALCE, GraphRAG, Perplexity/Gemini), and provenance schemas (nanopublications,
+PROV-O, RDF-star, Akoma Ntoso) found the pieces exist separately but not the
+combination: structured-output engines can require a `source` *key* to exist but
+not that its value is non-empty or *resolves*; citation methods produce or
+*evaluate* citations rather than refusing to record an unsourced one; and
+**refusing to record two conflicting claims until they are explicitly reconciled
+appears to exist nowhere** — the contradiction literature is all post-hoc
+benchmarks. This ledger binds both at record-time.
