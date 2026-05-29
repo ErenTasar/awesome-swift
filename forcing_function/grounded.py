@@ -167,11 +167,14 @@ class GroundedDecoder:
                 raise NeedsReconciliation(
                     f"edge {(reltype, target)!r} does not resolve to an existing "
                     f"claim {sorted(self._ids)}")
-        if key in self._seen_keys and not any(
-                rt in RECONCILERS and tgt in self._ids for rt, tgt in rels):
-            raise NeedsReconciliation(
-                f"claim {cid!r} reuses key {key!r}; needs a reconciling edge "
-                f"({'/'.join(sorted(RECONCILERS))}) to one of {sorted(self._ids)}")
+        if key in self._seen_keys:
+            same_key = {c.id for c in self.claims if c.key == key}
+            if not any(rt in RECONCILERS and tgt in same_key for rt, tgt in rels):
+                raise NeedsReconciliation(
+                    f"claim {cid!r} reuses key {key!r}; needs a reconciling edge "
+                    f"({'/'.join(sorted(RECONCILERS))}) to a prior claim with the "
+                    f"same key {sorted(same_key)} (an edge to an unrelated claim "
+                    f"does not record the conflict)")
         # --- semantic faithfulness: one judge, full source as context ---
         if self.judge is not None and not self.judge(text, quote, body):
             raise UnfaithfulCitation(
@@ -197,7 +200,10 @@ def reverify(pool, claim, require_trusted_link=False):
             f"claim {claim.id!r} has no recorded src_hash; unverifiable")
     if pool.hash(claim.src) != claim.src_hash:
         raise TamperedSource(f"source {claim.src!r} changed since the claim was made")
-    if claim.quote and claim.quote not in body:
+    if not (claim.quote and claim.quote.strip()):           # fail closed
+        raise TamperedSource(
+            f"claim {claim.id!r} carries no quote; unverifiable")
+    if claim.quote not in body:
         raise TamperedSource(f"quote no longer present in source {claim.src!r}")
     if require_trusted_link:
         uri = pool.uri(claim.src)

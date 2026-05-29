@@ -106,6 +106,25 @@ def test_edge_must_resolve_to_an_existing_claim():
                 quote=PLUTO, rels=[("supersedes", "nope")])
 
 
+def test_conflict_edge_must_target_a_same_key_claim():
+    # Pentest V1: reusing a key must be reconciled against a claim that *shares
+    # that key*. An edge to an unrelated claim resolves structurally but leaves
+    # the actual conflict unrecorded, so it must be refused.
+    gd = GroundedDecoder(POOL)
+    gd.cite(cid="c1", text="Pluto is the ninth planet.", src="old",
+            quote="Pluto is the ninth planet.", key="pluto")
+    gd.cite(cid="unrelated", text="The fee is waived.", src="fee",
+            quote="The fee is waived.", key="fee")
+    with pytest.raises(NeedsReconciliation):
+        gd.cite(cid="c2", text="Pluto is a dwarf planet.", src="iau-2006",
+                quote=PLUTO, key="pluto", rels=[("refines", "unrelated")])
+    assert [c.id for c in gd.claims] == ["c1", "unrelated"]
+    # The same edge, pointed at the conflicting same-key claim, is accepted.
+    c2 = gd.cite(cid="c2", text="Pluto is a dwarf planet.", src="iau-2006",
+                 quote=PLUTO, key="pluto", rels=[("supersedes", "c1")])
+    assert c2.rels == [("supersedes", "c1")]
+
+
 def test_duplicate_id_is_refused():
     gd = GroundedDecoder(POOL)
     gd.cite(cid="c1", text="The drug reduces fever.", src="pk",
@@ -202,6 +221,17 @@ def test_reverify_fails_closed_without_a_hash():
     fake = Claim(id="c1", text="x", src="iau-2006", quote=PLUTO, src_hash=None)
     with pytest.raises(TamperedSource):
         reverify(POOL, fake)
+
+
+def test_reverify_fails_closed_on_blank_quote():
+    # Pentest V3: cite() refuses a blank quote, so reverify must too. A claim
+    # arriving (e.g. across a boundary) with an empty quote is unverifiable, not
+    # vacuously valid.
+    from forcing_function.grounded import fingerprint
+    blank = Claim(id="c1", text="An unsupported assertion.", src="iau-2006",
+                  quote="", src_hash=fingerprint(POOL.text("iau-2006")))
+    with pytest.raises(TamperedSource):
+        reverify(POOL, blank)
 
 
 def test_reverify_rechecks_trust_when_required():
