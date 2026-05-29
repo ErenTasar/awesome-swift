@@ -7,7 +7,8 @@ commit, a script, or an eval you can re-run). If a finding is wrong, it should b
 wrong *here*, in the open, where the next person can overturn it.
 
 Branch: `claude/citation-ledger-pentest-ab-6DmKC`. Tests: `PYTHONPATH=. pytest
-forcing_function/` (25, all green). Code under test: `forcing_function/grounded.py`.
+forcing_function/` (69, all green). Code under test: `grounded.py`, `verified.py`,
+`verifiers.py`, `tool_guard.py`.
 
 ---
 
@@ -694,3 +695,58 @@ from both sides: *unrigged, the model is right where it can be and abstains wher
 cannot* — so the receipt's role is supplier / channel-restorer / trust-carrier, not
 brain. (Subagent harness ephemeral, not committed; `fill()` + tests + demo are
 permanent.)
+
+---
+
+## 17. Real-world validation of the confidence false-positive (and what actually triggers it)
+
+§13 produced the channel flip on tasks chosen to be hard; the fair test the user
+asked for is whether the **confidence false-positive** — a capable model emitting a
+wrong value while reporting full certainty — shows up on *realistic agent emits*.
+Matched-control again (Opus, tools forbidden, only the output channel varies):
+`{"value","certain"}` vs `{"work","value","certain"}`. Truths computed independently
+and graded by hand.
+
+**First, the negative that sharpens the precondition.** Three realistic but
+single-pass tasks — SaaS prorate (charge cents), tiered commission (cents), meeting
+overlap (rooms) — gave **12/12 correct in BOTH arms**, every one `certain:true` and
+right. No flip. Two reasons, both real: (a) these are within one mental pass for
+Opus (a few products and a sum), so §11's precondition isn't met; (b) in the
+value-only arm the model often wrote a short rationale *before* the JSON anyway —
+the subagent channel can't fully suppress reasoning the way a real JSON-mode API
+does. Typical billing/scheduling arithmetic does not clear the bar.
+
+**Then the positive, on a heavier but equally realistic task.** A 15-line-item
+e-commerce invoice (15 products + sum + tax rounding + shipping − coupon; truth
+56394), which *does* exceed one pass:
+
+| arm (n) | result | note |
+|---------|--------|------|
+| value-only, reasoning NOT externalised (2 of the 4) | **0/2** — emitted **116465** and **90536**, both `certain:true` | two *different* wrong values; one nearly **2× the true charge** |
+| value-only, model wrote the steps before the JSON anyway (2 of the 4) | 2/2 — 56394 | externalised the computation despite the format |
+| `{"work",…}` reasoning field (2) | 2/2 — 56394 | — |
+
+**What this establishes for the user's headline finding:**
+
+- The confidence false-positive **reproduces on a real billing task**: confident,
+  silent, and large (a 2× overcharge), not a small rounding slip.
+- The wrong values are **different across runs** (116465 ≠ 90536) — the failure is
+  stochastic in magnitude, so majority-voting or an "looks off" sniff test does not
+  catch it. Only an independent check does.
+- **The real trigger is whether the computation is externalised, not the format
+  per se.** Value-only does not *force* the model wrong; it *discourages* reasoning.
+  When the model externalised the steps anyway it was right (2/2); when it committed
+  a value cold it was confidently wrong (0/2). A strict real-world JSON-mode /
+  function-call API removes that choice — so the in-the-wild rate is *at least* what
+  we saw here, likely higher.
+
+**Honest limits.** One model (Opus), n=4 value-only / n=2 work on the heavy task,
+one heavy + three light scenarios; the subagent value-only arm is *looser* than a
+true API JSON-mode (it permits pre-JSON text), which makes the 0/2 a conservative
+floor, not a rate. What is robust and matched-controlled: on a realistic computed
+field that exceeds one pass, withholding the reasoning channel turns a capable,
+honest model into a confidently-wrong one — and the error is large and silent. That
+is the finding worth carrying: not "the receipt is a great product," but "a
+parse-optimised output channel manufactures confident-wrong on exactly the
+high-stakes computed fields production agents emit." (Harness ephemeral, not
+committed.)
