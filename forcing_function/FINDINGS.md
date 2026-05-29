@@ -361,3 +361,56 @@ wrong* — and that the output cannot distinguish the two. The no-trace regime w
 induced by forbidding written reasoning; a real agent that reasons silently then
 reports may sit between the poles, but the origin artifact shows the bad pole
 occurs in the wild.
+
+---
+
+## 11. Does it happen on NATURAL tasks? (the ecological-validity test)
+
+The §10 no-trace condition is artificial: forbidding the model to think is not
+something that happens in practice. The honest question is whether the confident-
+wrong failure shows up under **natural** conditions — reasoning allowed, on
+realistic tasks. Two steps.
+
+**Step 1 — the benign half generalises (second family).** Repeated §10's
+WITH-TRACE arm on a different cognitive task: a stack machine (push / `+` / `-` /
+dup / swap), depth-swept d2..d14, n=7 Opus, reasoning shown. Result: **49/49
+correct**, all `certain:true`. "Trace ⇒ correct & calibrated" replicates outside
+modular arithmetic.
+
+**Step 2 — natural tasks, reasoning free (the real test).** Five Opus runs, told
+to think and mentally test, implemented four realistic, edge-dense utilities —
+`parse_csv_line` (quoted fields, `""` escaping, embedded commas, trailing comma,
+empty line), `split_amount` (remainder distribution), `business_days` (half-open,
+weekends, holidays-on-weekends), `expand_ranges` (inclusive ranges, dedupe,
+`a>b`→ValueError) — and self-certified each. Graded independently against a
+hidden 26-case adversarial suite (validated first against a reference impl).
+
+> **Result: 5/5 runs self-certified `overall_ready: true`, and all 20
+> function-implementations were actually correct (every hidden case passed). Zero
+> confident-wrong.**
+
+**What this means, stated against our own thesis:**
+
+- On realistic tasks **within the model's competence, with reasoning allowed, the
+  confident "done" was reliable** — the ledger would only have re-confirmed
+  correct work. The marginal-value worry (§5, and the user's from the start) is
+  **confirmed for natural generation/reasoning tasks.** We could not manufacture a
+  natural confident-wrong on a top model by edge-case density alone.
+- The 86% confident-wrong of §10 required the artificial no-trace gag. So that
+  number is **not** an in-the-wild rate; it is a proxy for one specific event.
+- That event is the real one: the origin artifact ("runs cleanly" on a
+  non-existent API) was **not a reasoning error** — the model did not mis-compute,
+  it claimed an **execution that never happened.** That is a tool-use / agent-
+  discipline failure, orthogonal to model strength, and it is exactly what
+  `verified.py` forecloses by *making the execution actually occur* before "done"
+  is recorded. The no-trace experiment models "asserted without doing the work";
+  it does not model a careful agent mis-reasoning, because — per Step 2 — that
+  mostly does not happen.
+
+**Sharpened verdict.** The execution ledger's value is **not** "catches a strong
+model reasoning wrong on normal tasks" — measured directly, that case did not
+occur (0/20). Its value is narrower and real: it guarantees that a claimed
+execution *actually ran*, which insures against the claimed-but-never-ran event
+(real, demonstrated, model-strength-independent) and against tasks that exceed
+what in-context reasoning can do. Where the producer genuinely reasons or runs,
+the ledger is redundant — and that is now measured, not assumed.
