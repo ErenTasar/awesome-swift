@@ -466,3 +466,45 @@ task, *removing vs. restoring the output reasoning channel* moves accuracy betwe
 0/8 and 8/8 with everything else held fixed. That is the publishable result, and
 it is exactly why a mechanical, external check has a place where structured I/O
 removes the model's room to do the work.
+
+---
+
+## 13. It generalises: same flip across realistic scenarios
+
+The obvious objection to §12 is that the modular hash was engineered to be
+execution-necessary. So we re-ran the *matched* contrast (only the output channel
+differs; tools forbidden in both arms; Opus) on two **realistic agent emits**,
+plus the original — three distinct cognitive modes.
+
+| domain (what the value IS) | value-only `{"x"}` (no reasoning channel) | `{"work","x"}` (channel restored) | truth |
+|----------------------------|-------------------------------------------|-----------------------------------|-------|
+| modular hash (§12) | **0/8** | 8/8 | 56 |
+| cart subtotal → the `charge()` amount | **0/5** compliant (errors $20–$115 off; the 1/6 that was right broke the format to reason) | 6/6 | 33681 |
+| meeting overlap → a scheduler's room count | **0/6** (all answered `3`) | 6/6 | 4 |
+
+Same model, same task, same "no tools" — flip the presence of one `work` field
+and accuracy moves from ~0 to ~100 in every domain, across serial arithmetic,
+multi-item summation, and interval sweeping.
+
+Two things sharpen the danger beyond "it forced the model dumb":
+
+- **The errors are silent and systematic, not noisy.** Value-only runs were
+  uniformly `certain` with no hedge, and often **converged on a single wrong
+  value** (every scheduler run said `3`; the cart runs clustered near the right
+  magnitude but wrong by tens of dollars). A wrong answer that is stable across
+  samples is one you cannot catch by majority-voting or by "it looks off."
+- **The trigger is the normal shape of high-stakes agent I/O.** These are exactly
+  the values a function-calling agent emits as arguments — a charge amount, a
+  resource count — through a schema built for parseability, i.e. with no room to
+  compute. The interface that makes the output reliable to *parse* is the one that
+  makes the value unreliable to *trust*.
+
+**So: yes, the failure generalises, and it is not a toy.** Holding the model and
+task fixed, the output channel alone decides correctness, in scenarios that look
+like ordinary production tool calls. The honest precondition still holds (the task
+must exceed a single mental pass; within-ability tasks are fine either way, §11),
+but "exceeds a single pass" describes a large fraction of real computed arguments.
+This is the publishable core: **structured/value-only output channels silently
+convert a capable model into a confidently wrong one on any computed field, and
+the fixes are (1) a reasoning field, (2) a tool call, or (3) an external execution
+receipt for the value.**
