@@ -253,3 +253,25 @@ def test_surface_exposes_only_cite():
     gd = GroundedDecoder(POOL)
     assert hasattr(gd, "cite")
     assert not hasattr(gd, "emit") and not hasattr(gd, "apply")
+
+
+# --- agent-pipeline: temporal trust handoff (reverify catches drift) --------
+
+def test_reverify_flags_content_drift_and_link_repoint():
+    TRUSTED = {"eur-lex.europa.eu"}
+    s0 = {"a": "Limit is 5 mg/kg.", "b": "Permits last 12 months."}
+    u0 = {"a": "https://eur-lex.europa.eu/a", "b": "https://eur-lex.europa.eu/b"}
+    gd = GroundedDecoder(SourcePool(s0, uris=u0, trusted_domains=TRUSTED),
+                         require_trusted_link=True)
+    ca = gd.cite(cid="a", text="Limit is 5 mg/kg.", src="a", quote="Limit is 5 mg/kg.")
+    cb = gd.cite(cid="b", text="Permits last 12 months.", src="b",
+                 quote="Permits last 12 months.")
+    # drift: a's content changes, b's link repoints off-allowlist
+    drifted = SourcePool({"a": "Limit is 50 mg/kg.", "b": "Permits last 12 months."},
+                         uris={"a": "https://eur-lex.europa.eu/a",
+                               "b": "https://evil.example/b"},
+                         trusted_domains=TRUSTED)
+    with pytest.raises(TamperedSource):
+        reverify(drifted, ca, require_trusted_link=True)      # content drift
+    with pytest.raises(TamperedSource):
+        reverify(drifted, cb, require_trusted_link=True)      # link repoint

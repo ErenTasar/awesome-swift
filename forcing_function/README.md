@@ -92,6 +92,29 @@ Read honestly:
 Caveats: n=1 per cell; the control arm was *given* structured (id, quote) output
 it would not have in true free form, and still shipped a defect in each cell.
 
+### Agent-pipeline isolation (temporal trust handoff)
+
+The cleanest case for the ledger: a *consumer* stage must trust a *producer*
+stage's claims, but sources can drift in between. A producer minted five verified
+claims at T0; then one source's **content** changed (residue limit 5 → 50 mg/kg)
+and one source's **link** repointed to an untrusted origin. A consumer must flag
+the now-unsafe claims. (`example_pipeline.py` runs this.)
+
+| consumer | flagged | cost | basis |
+|----------|---------|------|-------|
+| `reverify()` (treatment) | reg-2, reg-4 — exact | O(1)/claim, 0 tokens, deterministic | sha256 + allowlist |
+| Opus (control) | reg-2, reg-4 — correct | a model call, by reasoning | reads & compares |
+| Haiku (control) | reg-2, reg-4 — correct | a model call, by reasoning | reads & compares |
+
+**Honest result: no detection gap.** A capable model, *given the drifted sources*,
+flagged the same claims — including the link repoint and even a subtler material
+edit ("50,000 euro" → "50,000 euro per day"). So the ledger does **not** catch
+what a model cannot. Its edge here is narrower and real: it is **deterministic,
+zero-model-cost, and auditable** — a hash either matches or it does not, no
+judgment call, no per-claim token spend, and the check itself leaves a verifiable
+record. For a pipeline re-checking thousands of claims on every run, that is the
+difference between a guarantee and a model call you have to trust and pay for.
+
 ## The three guarantees
 
 **1. Mechanical provenance integrity — finite and sound.**
