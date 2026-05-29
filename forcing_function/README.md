@@ -94,6 +94,19 @@ words, with matching polarity, can still misorder a relation; that residue is th
 judge's, and the judge is fallible. A red-team (`redteam_grounded.py`) gets every
 mechanical attack refused; only judge-residue and pool-poisoning remain.
 
+Two opt-in modes address those last two:
+
+- **`extractive=True`** — the claim text must *be* the quote verbatim. You cannot
+  reorder or drop what you must reproduce exactly, so the "wrong relation among
+  shared words" residue becomes impossible *without* a judge — at the cost of no
+  paraphrase. The right default for statutes, dosages, contract clauses.
+- **`require_trusted_link=True`** with `SourcePool(..., uris=, trusted_domains=)`
+  — the source must carry a reference link whose origin is in an allowlist of
+  authoritative publishers. This does not conjure trust; it *names* the external
+  trust root (e.g. `eur-lex.europa.eu`) and makes the citation independently
+  re-fetchable. Trust still bottoms out at "who curates the allowlist" — that
+  bottom is irreducible, but now explicit and accountable.
+
 For pool poisoning, sources are fingerprinted (sha256) and a claim records
 `src_hash`; `reverify()` re-checks a claim against the (possibly reloaded) pool
 and detects tampering. This makes provenance *tamper-evident*; making it

@@ -113,6 +113,11 @@ class UnfaithfulCitation(IllegalAction):
     """Tier 3: the (fallible) judge ruled the quote does not support the claim."""
 
 
+class UntrustedSource(NeedsProvenance):
+    """A trusted reference link was required but the source has no link, or its
+    link's origin is not in the pool's trusted-domain allowlist."""
+
+
 class TamperedSource(Exception):
     """Re-verification: the source text no longer matches the recorded hash."""
 
@@ -121,17 +126,34 @@ def fingerprint(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _domain(uri):
+    from urllib.parse import urlparse
+    return (urlparse(uri).hostname or "").lower()
+
+
 class SourcePool:
     """The closed set of sources a model is allowed to cite, each fingerprinted
     so tampering is detectable. A model cannot cite anything outside it, so
     provenance cannot be invented; and a later edit to a source is detectable via
-    its hash."""
+    its hash.
 
-    def __init__(self, sources):
-        self.sources = dict(sources)        # id -> full source text
+    Optionally each source carries a reference `uri` (a resolvable link), and the
+    pool declares `trusted_domains`: an allowlist of authoritative publishers.
+    The allowlist is the *named, accountable trust root* — citing is then limited
+    to sources that link to an origin you have decided to trust. This does not
+    create trust from nothing; it makes the root explicit and enforceable."""
+
+    def __init__(self, sources, uris=None, trusted_domains=None):
+        self.sources = dict(sources)            # id -> full source text
+        self.uris = dict(uris or {})            # id -> reference link
+        self.trusted_domains = (set(d.lower() for d in trusted_domains)
+                                if trusted_domains is not None else None)
 
     def text(self, sid):
         return self.sources.get(sid)
+
+    def uri(self, sid):
+        return self.uris.get(sid)
 
     def hash(self, sid):
         body = self.sources.get(sid)
@@ -139,7 +161,8 @@ class SourcePool:
 
 
 def emit_grounded(d, pool, cid, text, src, quote, key=None, rels=(), judge=None,
-                  whole_sentence=True, grounded_words=True, negation_parity=True):
+                  whole_sentence=True, grounded_words=True, negation_parity=True,
+                  extractive=False, require_trusted_link=False):
     """Emit a claim only if its source resolves, its quote is verbatim (and, by
     default, whole-sentence and word-bounded), polarity matches, and an optional
     judge accepts. Atomic: every check runs before the underlying emit().
@@ -149,12 +172,33 @@ def emit_grounded(d, pool, cid, text, src, quote, key=None, rels=(), judge=None,
       grounded_words   claim's content words must be in quote (blocks new facts /
                        irrelevant quotes)
       negation_parity  claim & quote negation cues must match (blocks polarity flip)
+      extractive       the claim text must BE the quote verbatim. This makes the
+                       'wrong relation among shared words' residue impossible —
+                       you cannot reorder or drop what you must reproduce exactly
+                       — at the cost of no paraphrase/synthesis. The strongest
+                       answer to Case 1, when faithful wording matters more than
+                       fluency (statutes, dosages, contract clauses).
+      require_trusted_link  the source must carry a reference link whose origin is
+                       in the pool's trusted-domain allowlist. This names the
+                       external trust root for Case 2: provenance is limited to
+                       authoritative publishers you chose to trust. It does not
+                       conjure trust — it relocates it to an accountable origin
+                       and makes the citation independently re-fetchable.
     """
     # Tier 1 — resolvable: invented sources are impossible.
     body = pool.text(src)
     if body is None:
         raise UnresolvableSource(
             f"src {src!r} is not in the source pool {sorted(pool.sources)}")
+    # Tier 1b — trusted link: provenance limited to an accountable, named root.
+    if require_trusted_link:
+        uri = pool.uri(src)
+        if not uri:
+            raise UntrustedSource(f"src {src!r} has no reference link")
+        if pool.trusted_domains is not None and _domain(uri) not in pool.trusted_domains:
+            raise UntrustedSource(
+                f"link {uri!r} (origin {_domain(uri)!r}) is not in the trusted "
+                f"allowlist {sorted(pool.trusted_domains)}")
     # Tier 2 — verbatim: fabricated quotes are impossible.
     if not (quote and quote.strip()):
         raise FabricatedQuote(f"claim {cid!r} needs a verbatim quote from {src!r}")
@@ -166,6 +210,11 @@ def emit_grounded(d, pool, cid, text, src, quote, key=None, rels=(), judge=None,
         raise FabricatedQuote(
             f"quote {quote!r} is a partial span; it must be whole sentence(s) "
             f"of source {src!r} (else a sub-span could reverse its meaning)")
+    # Tier 2e — extractive: the claim is the quote, so no relation can be twisted.
+    if extractive and text.strip() != quote.strip():
+        raise UngroundedClaim(
+            f"claim {cid!r} is not extractive: in extractive mode the claim must "
+            f"be the quote verbatim (no paraphrase), got {text!r} != {quote!r}")
     # Tier 2c — grounded words: the claim cannot say more than the quote does.
     if grounded_words:
         missing = _content_words(text) - _content_words(quote)
@@ -185,6 +234,7 @@ def emit_grounded(d, pool, cid, text, src, quote, key=None, rels=(), judge=None,
     c = d.emit(cid=cid, text=text, src=src, key=key, rels=rels)
     c.quote = quote
     c.src_hash = pool.hash(src)
+    c.uri = pool.uri(src)
     return c
 
 

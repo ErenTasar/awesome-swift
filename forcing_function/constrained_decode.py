@@ -55,6 +55,7 @@ class Claim:
     rels: list = field(default_factory=list)
     quote: str = None          # set by the grounded layer: a verbatim span of src
     src_hash: str = None       # set by the grounded layer: fingerprint of src text
+    uri: str = None            # set by the grounded layer: resolvable reference link
 
 
 class State:

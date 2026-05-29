@@ -155,3 +155,56 @@ def test_reverify_detects_a_tampered_source():
                                               "It declared Pluto the tenth planet."}))
     with pytest.raises(TamperedSource):
         reverify(poisoned, c)
+
+
+# --- extractive mode: makes the 'wrong relation' residue impossible ---------
+
+def test_extractive_mode_blocks_relation_reversal():
+    # The residue case (Fever reduces the drug) is refused without any judge,
+    # because the claim must BE the quote verbatim.
+    d = ForcingDecoder()
+    with pytest.raises(UngroundedClaim):
+        emit_grounded(d, POOL, cid="c1", text="Fever reduces the drug.",
+                      src="pk", quote="The drug reduces fever.", extractive=True)
+
+
+def test_extractive_mode_accepts_the_verbatim_claim():
+    d = ForcingDecoder()
+    c = emit_grounded(d, POOL, cid="c1", text="The drug reduces fever.",
+                      src="pk", quote="The drug reduces fever.", extractive=True)
+    assert c.text == c.quote
+
+
+# --- trusted reference link: names the external trust root ------------------
+
+def test_untrusted_link_is_refused():
+    from forcing_function.grounded import UntrustedSource
+    pool = SourcePool(
+        {"x": "Vaccines cause harm."},
+        uris={"x": "http://evil.example/forged"},
+        trusted_domains={"eur-lex.europa.eu", "pubmed.ncbi.nlm.nih.gov"})
+    d = ForcingDecoder()
+    with pytest.raises(UntrustedSource):
+        emit_grounded(d, pool, cid="c1", text="Vaccines cause harm.",
+                      src="x", quote="Vaccines cause harm.",
+                      require_trusted_link=True)
+
+
+def test_trusted_link_passes_and_is_recorded():
+    pool = SourcePool(
+        {"reg": "The additive is banned in food."},
+        uris={"reg": "https://eur-lex.europa.eu/eli/reg/2023/1"},
+        trusted_domains={"eur-lex.europa.eu"})
+    d = ForcingDecoder()
+    c = emit_grounded(d, pool, cid="c1", text="The additive is banned in food.",
+                      src="reg", quote="The additive is banned in food.",
+                      require_trusted_link=True)
+    assert c.uri == "https://eur-lex.europa.eu/eli/reg/2023/1"
+
+
+def test_missing_link_is_refused_when_required():
+    from forcing_function.grounded import UntrustedSource
+    d = ForcingDecoder()
+    with pytest.raises(UntrustedSource):   # POOL has no uris
+        emit_grounded(d, POOL, cid="c1", text="Pluto is a dwarf planet.",
+                      src="iau-2006", quote=PLUTO, require_trusted_link=True)
