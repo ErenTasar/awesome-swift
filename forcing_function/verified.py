@@ -30,9 +30,11 @@ Form is executed; intent is judged. A receipt, not a promise.
 """
 
 import hashlib
+import json
 import subprocess
+import sys
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 
 # --- errors -----------------------------------------------------------------
@@ -132,6 +134,20 @@ class ActionLedger:
     def summary(self):
         return [(a.id, a.assertion, a.receipt.exit_code) for a in self.actions]
 
+    def save(self, path):
+        """Persist the receipts so a *later stage or another process* can
+        re-verify them. This is what makes a trust handoff real: the producer
+        writes the ledger, the consumer loads and re-runs it."""
+        with open(path, "w") as fh:
+            json.dump([asdict(a) for a in self.actions], fh, indent=2)
+
+
+def load_ledger(path):
+    """Load recorded actions written by ActionLedger.save()."""
+    with open(path) as fh:
+        raw = json.load(fh)
+    return [Action(a["id"], a["assertion"], Receipt(**a["receipt"])) for a in raw]
+
 
 def reverify(action, cwd=None, timeout=120, require_same_output=False):
     """Independently re-run a recorded action's check. Fails closed: a different
@@ -146,3 +162,48 @@ def reverify(action, cwd=None, timeout=120, require_same_output=False):
         raise ReceiptMismatch(
             f"claim {action.id!r}: output of {_show(receipt.cmd)!r} changed since recorded")
     return True
+
+
+# --- CLI: make completion claims and re-verification usable from a shell ----
+
+def _cli(argv):
+    """
+      verified claim <id> <assertion> <ledger.json> -- <check cmd...>
+          run <check>; append a receipt to <ledger.json> iff it passes.
+      verified verify <ledger.json>
+          re-run every recorded receipt; exit 1 if any fails.
+    """
+    if not argv or argv[0] not in ("claim", "verify"):
+        print(_cli.__doc__); return 2
+    if argv[0] == "claim":
+        sep = argv.index("--")
+        cid, assertion, path = argv[1], argv[2], argv[3]
+        check = argv[sep + 1:]
+        try:
+            led = ActionLedger()
+            led.actions = load_ledger(path)
+            led._ids = {a.id for a in led.actions}
+        except FileNotFoundError:
+            led = ActionLedger()
+        try:
+            a = led.claim(cid, assertion, check)
+        except UnverifiedClaim as e:
+            print(f"REFUSED: {e}"); return 1
+        led.save(path)
+        print(f"recorded {a.id!r}: exit={a.receipt.exit_code} "
+              f"digest={a.receipt.output_digest[:12]}")
+        return 0
+    # verify
+    bad = []
+    for a in load_ledger(argv[1]):
+        try:
+            reverify(a)
+            print(f"  OK     {a.id}: {a.assertion}")
+        except ReceiptMismatch as e:
+            bad.append(a.id); print(f"  FAILED {a.id}: {e}")
+    print(f"{'FAIL' if bad else 'PASS'}: {len(bad)} regressed claim(s)")
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(_cli(sys.argv[1:]))

@@ -9,7 +9,7 @@ import sys
 import pytest
 
 from forcing_function.verified import (
-    ActionLedger, Action, Receipt, reverify, digest,
+    ActionLedger, Action, Receipt, reverify, digest, load_ledger,
     UnverifiedClaim, ReceiptMismatch)
 
 PY = sys.executable
@@ -102,3 +102,32 @@ def test_claim_against_a_nonexistent_api_is_refused():
     with pytest.raises(UnverifiedClaim):
         led.claim("smoke", "the script runs cleanly", check=[PY, "-c", script])
     assert led.actions == []
+
+
+# --- persistence: receipts survive a handoff to another process ------------
+
+def test_save_load_roundtrip_and_reverify(tmp_path):
+    led = ActionLedger()
+    led.claim("c1", "math works", check=[PY, "-c", "assert 2+2==4"])
+    path = tmp_path / "ledger.json"
+    led.save(path)
+    loaded = load_ledger(path)
+    assert [a.id for a in loaded] == ["c1"]
+    assert loaded[0].receipt.cmd == [PY, "-c", "assert 2+2==4"]
+    assert reverify(loaded[0]) is True            # re-runs from the loaded receipt
+
+
+def test_reverify_from_disk_flags_a_regression(tmp_path):
+    # Producer records a claim bound to a file; the file then regresses; a
+    # consumer that only has the saved ledger still catches it.
+    mod = tmp_path / "m.py"
+    mod.write_text("def ok():\n    return 1\n")
+    led = ActionLedger(cwd=str(tmp_path))
+    # -B: never write .pyc, so a re-run always sees current source (hermetic)
+    led.claim("ok", "ok() returns 1", check=[PY, "-B", "-c", "from m import ok; assert ok()==1"])
+    path = tmp_path / "l.json"
+    led.save(path)
+    mod.write_text("def ok():\n    return 2\n")    # regression after handoff
+    [a] = load_ledger(path)
+    with pytest.raises(ReceiptMismatch):
+        reverify(a, cwd=str(tmp_path))

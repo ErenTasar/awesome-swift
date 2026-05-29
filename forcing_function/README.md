@@ -151,13 +151,20 @@ ledger makes it explicit and accountable rather than pretending to remove it.
 - `example.py` — a runnable example (the working form of the snippet above).
 - `example_pipeline.py` — the temporal trust-handoff (drifted sources) demo.
 - `FINDINGS.md` — the standing, falsifiable record of what we concluded and how to overturn it.
-- `verified.py` — the **execution ledger** (see FINDINGS §8): the same
+- `verified.py` — the **execution ledger** (see FINDINGS §8/§10): the same
   forcing-function aimed at agent *completion claims* instead of text. A
   "done/verified" claim is recordable only if a check actually runs and passes;
-  `reverify()` re-runs the receipt. This is the one position where the value is
-  real and locally rooted (re-execution), not plumbing around someone else's
-  root. `verified_demo.py` reproduces the project's "runs cleanly" artifact and
-  catches it; `test_verified.py` has the guarantees as tests.
+  `reverify()` re-runs the receipt; `save`/`load_ledger` persist receipts across
+  a handoff. Usable as a CLI:
+  `python -m forcing_function.verified claim <id> <assertion> <ledger.json> -- <check…>`
+  and `… verify <ledger.json>`. This is the one position where the value is real
+  and locally rooted (re-execution), not plumbing around someone else's root —
+  and §10 bounds *when* it pays off (only when the producer commits without
+  executing; redundant when it actually ran).
+- `verified_demo.py` — reproduces the project's "runs cleanly" artifact and
+  catches it; `example_agent_pipeline.py` — a producer→consumer handoff where
+  `reverify()` pinpoints exactly the regressed claim across a process boundary;
+  `test_verified.py` — the guarantees as tests.
 
 ## Prior art (why the citation + reconciliation pairing is a real gap)
 
