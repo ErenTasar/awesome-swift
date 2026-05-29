@@ -38,11 +38,28 @@ grammar and the demos were deleted. What the eval actually credited remains:
 - machine-verifiable citations (every quote is provably verbatim), and
 - explicit reconciliation of conflicting facts (the shared-`key` → edge rule).
 
-What the eval did **not** credit, stated honestly: with a strong, careful model
-the grounded mode produced **no accuracy gain** over a free-form answer that was
-already asked to cite. The value here is *auditability and conflict-surfacing*,
-not making a capable model more correct. (It did keep a weaker model on-rails in
-one run, but that is confounded with the task being framed as a coding task.)
+What the eval did **not** credit, stated honestly: across n=8 runs on three
+models (Opus / Sonnet / Haiku), grounded mode produced **no accuracy gain** over a
+free-form answer that was already asked to cite. Strong or weak, the model got the
+hard cases right either way. So this is **not an accuracy aid** — it does not make
+a capable model smarter.
+
+What it *is*: an **accountability** layer — it makes a model's output verifiable by
+someone who was not in the room. The sharpest evidence arrived by accident: in one
+Opus run an agent wrote an eval script against a *non-existent* API
+(`gd.finalized()`, `c.cid`) and confidently reported "runs cleanly." It had never
+run; a human caught it only by executing it. That is the thesis in one event — a
+strong model is not *less* accurate, it is *more convincingly wrong*, and the cost
+of catching that rises. `cite()` would have refused an unsourced step; `reverify()`
+checks an "it works" claim independently, automatically, for free.
+
+**Cost is not the objection.** `cite()` is a substring + hash check —
+microseconds, zero model tokens; the marginal cost over a normal answer is a few
+tokens of structure. (An earlier draft mis-attributed a huge token count to the
+ledger; that was a sandbox script-iteration artifact, not the ledger's cost.) The
+real limit is **scope**: it earns its place where the producer is not the reader —
+legal memos, clinical summaries, compliance reports, agent pipelines where one step
+must trust another's output. For low-stakes single-user chat it is overhead.
 
 ## The three guarantees
 
