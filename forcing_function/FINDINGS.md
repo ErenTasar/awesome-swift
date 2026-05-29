@@ -508,3 +508,56 @@ This is the publishable core: **structured/value-only output channels silently
 convert a capable model into a confidently wrong one on any computed field, and
 the fixes are (1) a reasoning field, (2) a tool call, or (3) an external execution
 receipt for the value.**
+
+---
+
+## 14. Generalising the receipt: one pattern, many trust roots (built)
+
+Yes — the "claim must bind to a receipt" idea generalises programmatically, and it
+unifies the whole project. `verifiers.py` names the pattern as a pluggable
+`Verifier` (each exposes `check() -> Receipt`; `reverify()` re-derives it) and a
+`Ledger` that records a claim only if its verifier passes. cite() and
+ActionLedger.claim() are revealed as two instances; we added the one §13 most
+demands. Built, tested (8 tests), demoed (`verifiers_demo.py`); 45 tests green.
+
+| receipt kind (built) | binds the claim to | trust root (local) | catches |
+|----------------------|--------------------|--------------------|---------|
+| `Recompute` | an independent reference computation | a reference function | the §13 silent-wrong computed field (charge, count, total) |
+| `Command` | a real execution (exit/output) | local re-execution | "tests pass / it runs / done" confabulation |
+| `Quote` | a verbatim substring of a source | the source text | fabricated citations |
+
+The demo makes the gain concrete: a model emitted `total_cents=23734` (a real
+value-only output from §13; truth 33681); `Recompute` refused it with the exact
+mismatch and recorded the correct value — deterministically, zero tokens, where a
+value-only function-call interface would have charged the wrong sum.
+
+**Where the gains are (ranked by the evidence we hold), and where they are not:**
+
+- **Computed fields in structured output / tool-call arguments (Recompute).**
+  Highest, because §13 *measured* a silent, systematic, high-stakes failure that
+  standard JSON/function-calling interfaces cause. Domains: payments/billing,
+  scheduling and resource allocation, tax/compliance figures, BI/report totals,
+  any derived numeric or boolean decision field.
+- **Agentic completion claims (Command + future File-state/AST/Type).** Stop
+  confabulated "done/tests-pass/refactored-everywhere" in multi-step and
+  multi-agent pipelines; pinpoint which claim regressed on a handoff.
+- **Provenance / document internal-consistency (Quote + cross-consistency).**
+  Auditability and "total = sum of line items" where producer != reader.
+
+**Honest limits (the generalisation does not remove these):**
+
+- *Adequacy residue.* A verifier checks only what it is pointed at; "is this the
+  right check / does it actually exercise the claim" stays a human/judge job (the
+  `Quote` judge, the `Command` `echo ok` loophole). Generalising relocates the
+  residue to "did you bind an adequate verifier," it does not delete it.
+- *Precondition.* Where the value is producible in a single pass, the receipt is
+  redundant (§11). The gain concentrates on computed/stateful fields.
+- *Verifier soundness burden.* Each verifier must itself be correct; we already hit
+  two of our own pitfalls (argv round-trip, stale `.pyc`). More kinds, more such
+  traps — add them sparingly, with their own tests.
+- *§4 wall for externally-rooted kinds.* A signature/timestamp/watermark verifier
+  only *checks someone else's* root; it is plumbing, not a guarantee we create.
+
+So the scope can be widened cleanly, but its honest payoff is concentrated where a
+value is *computed or stateful* and the output channel gives the model no room to
+do the work — exactly the regime §12/§13 isolated.

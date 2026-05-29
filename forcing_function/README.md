@@ -161,6 +161,10 @@ ledger makes it explicit and accountable rather than pretending to remove it.
   and locally rooted (re-execution), not plumbing around someone else's root —
   and §10 bounds *when* it pays off (only when the producer commits without
   executing; redundant when it actually ran).
+- `verifiers.py` — the **generalised** claim-to-receipt framework (FINDINGS §14):
+  a pluggable `Verifier`/`Receipt`/`Ledger`. `Recompute` (computed-field integrity,
+  the §13 fix), `Command` (execution), `Quote` (citation) in one ledger;
+  `verifiers_demo.py` + `test_verifiers.py`.
 - `verified_demo.py` — reproduces the project's "runs cleanly" artifact and
   catches it; `example_agent_pipeline.py` — a producer→consumer handoff where
   `reverify()` pinpoints exactly the regressed claim across a process boundary;
