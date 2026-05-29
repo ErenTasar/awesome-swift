@@ -74,44 +74,44 @@ via `grammar.gbnf` + llama.cpp, for the context-free provenance half.
 PYTHONPATH=. pytest forcing_function/test_forcing_function.py -q
 ```
 
-## Grounding layer (`grounded.py`): from "present" to "resolvable + verbatim"
+## Grounding layer (`grounded.py`): two primitives, nothing in between
 
-The base layer forces a non-blank source, but a model under pressure invents one.
-`emit_grounded()` hardens provenance against a closed `SourcePool`, converting as
-much of "is this citation honest?" into mechanical checks as possible:
+An earlier version of this layer grew a middle of half-mechanical heuristics
+(whole-sentence, grounded-words, negation-parity). A pentest showed each was both
+*unsound* (abbreviation sentence-splits, qualifier omission, off-list polarity
+words all bypassed it) and *incomplete* (the residue never ends — every new
+polarity word or omission pattern needs another rule). Chasing meaning with
+wordlists is a losing, never-ending game, so that middle was **deleted**. Two
+clean primitives remain:
 
-| tier | check | defeats | guarantee |
-|------|-------|---------|-----------|
-| 1 resolvable | `src` is an id in the pool | invented sources | mechanical |
-| 2 verbatim | `quote` is an exact substring of the source | fabricated quotes | mechanical |
-| 2b whole-sentence | quote is a run of whole sentences | dropping a leading negation (`not guilty`→`guilty`) | mechanical |
-| 2c grounded-words | every content word of the claim occurs in the quote | irrelevant quotes / new invented facts | mechanical |
-| 2d negation-parity | claim and quote negation cues match | polarity flips using the source's own words | mechanical (heuristic) |
-| 3 faithfulness | optional `judge(claim, quote)` | wrong *relation* among shared words | fallible judge |
+**1. Mechanical provenance integrity — finite and sound.** `emit_grounded()` /
+`GroundedDecoder.cite()` enforce, unconditionally:
 
-2c/2d are *necessary, not sufficient* — a claim built only from the quote's
-words, with matching polarity, can still misorder a relation; that residue is the
-judge's, and the judge is fallible. A red-team (`redteam_grounded.py`) gets every
-mechanical attack refused; only judge-residue and pool-poisoning remain.
+| check | defeats |
+|-------|---------|
+| resolvable `src` (an id in the `SourcePool`) | invented sources |
+| verbatim `quote` (exact substring of that source) | fabricated quotes |
+| tamper-evident (sha256 `src_hash`, `reverify()` fails closed) | post-hoc edits |
+| trusted origin (link in an allowlist, fails closed) | unaccountable sources |
+| `extractive=True` (claim text == quote) | the paraphrase channel |
 
-Two opt-in modes address those last two:
+These are exact, bounded checks — no wordlists, no sentence regex, nothing to
+keep patching.
 
-- **`extractive=True`** — the claim text must *be* the quote verbatim. You cannot
-  reorder or drop what you must reproduce exactly, so the "wrong relation among
-  shared words" residue becomes impossible *without* a judge — at the cost of no
-  paraphrase. The right default for statutes, dosages, contract clauses.
-- **`require_trusted_link=True`** with `SourcePool(..., uris=, trusted_domains=)`
-  — the source must carry a reference link whose origin is in an allowlist of
-  authoritative publishers. This does not conjure trust; it *names* the external
-  trust root (e.g. `eur-lex.europa.eu`) and makes the citation independently
-  re-fetchable. Trust still bottoms out at "who curates the allowlist" — that
-  bottom is irreducible, but now explicit and accountable.
+**2. Semantic faithfulness — one fallible judge, with full context.** Everything
+about *meaning* — omission, cherry-picking a sentence while dropping its
+qualifier, relation reversal, polarity — is decided by a single
+`judge(claim, quote, source)` that is handed the **entire source**. A judge that
+sees the whole document can catch what no local mechanical rule could; it is
+fallible, and that is stated plainly rather than papered over with heuristics.
 
-For pool poisoning, sources are fingerprinted (sha256) and a claim records
-`src_hash`; `reverify()` re-checks a claim against the (possibly reloaded) pool
-and detects tampering. This makes provenance *tamper-evident*; making it
-*trustworthy* needs an external signed root (re-fetch the canonical source at
-audit time), which is out of scope for the local layer.
+The split is the whole point: **form is provable, meaning is judged.**
+well-formedness, not truth. `GroundedDecoder` is the non-bypassable surface — it
+exposes only `cite()`, so there is no ungrounded `emit()` path to forget.
+
+Trust still bottoms out at "who curates the pool / the trusted-domain allowlist."
+That bottom is irreducible (every chain of trust ends at a root you choose); the
+layer makes it *explicit and accountable* rather than pretending to remove it.
 
 ## Prior art (and why this is a real gap)
 

@@ -1,40 +1,35 @@
-"""Tests for the grounding layer.
-
-Beyond resolvable-source + verbatim-whole-sentence (tiers 1/2/2b), these cover
-the two 'creative hacks' that convert previously judge-only gaps into mechanical
-checks: grounded-words (2c) and negation-parity (2d), plus tamper-evidence for
-pool poisoning. The honest residue — correct relation among shared words — still
-needs the fallible judge (tier 3)."""
+"""Tests for the grounding layer's two primitives:
+  1. mechanical provenance integrity (resolvable, verbatim, tamper-evident,
+     trusted-origin, optional extractive) — finite and sound;
+  2. one semantic judge that sees the FULL source — the only place meaning is
+     decided. No word/sentence heuristics remain.
+"""
 
 import pytest
 
 from forcing_function.constrained_decode import ForcingDecoder
 from forcing_function.grounded import (
-    SourcePool, emit_grounded, reverify,
-    UnresolvableSource, FabricatedQuote, UngroundedClaim, UnfaithfulCitation,
+    SourcePool, GroundedDecoder, emit_grounded, reverify,
+    UnresolvableSource, FabricatedQuote, UntrustedSource, UnfaithfulCitation,
     TamperedSource)
 
 
 POOL = SourcePool({
     "iau-2006": "The IAU met in 2006. It reclassified Pluto as a dwarf planet.",
-    "nist": "Water boils at 100 C at standard pressure. "
-            "Pressure changes the boiling point.",
-    "court": "The jury deliberated for a week. "
-             "The defendant was found not guilty on all counts.",
+    "fee": "The fee is waived. However, this applies only to first-time filers.",
     "pk": "The drug reduces fever.",
-    "myth": "Some people think water boils at 90 C.",
 })
 
-PLUTO = "It reclassified Pluto as a dwarf planet."   # a whole sentence of iau-2006
+PLUTO = "It reclassified Pluto as a dwarf planet."
 
 
-# --- tiers 1 / 2 / 2b (mechanism, airtight) ---------------------------------
+# --- 1. mechanical provenance integrity (sound, finite) ---------------------
 
 def test_invented_source_is_impossible():
     d = ForcingDecoder()
     with pytest.raises(UnresolvableSource):
         emit_grounded(d, POOL, cid="c1", text="Pluto is a dwarf planet.",
-                      src="general astronomical knowledge", quote=PLUTO)
+                      src="general knowledge", quote=PLUTO)
     assert d.state.output == []
 
 
@@ -48,76 +43,15 @@ def test_fabricated_quote_is_impossible():
 def test_quote_must_be_in_the_cited_source():
     d = ForcingDecoder()
     with pytest.raises(FabricatedQuote):
-        emit_grounded(d, POOL, cid="c1", text="Pluto is a dwarf planet.",
-                      src="iau-2006",
-                      quote="Water boils at 100 C at standard pressure.")
+        emit_grounded(d, POOL, cid="c1", text="x", src="iau-2006",
+                      quote="The drug reduces fever.")   # lives in another source
 
 
-def test_negation_dropping_subspan_is_refused():
+def test_blank_quote_is_refused():
     d = ForcingDecoder()
     with pytest.raises(FabricatedQuote):
-        emit_grounded(d, POOL, cid="c1", text="The defendant was convicted.",
-                      src="court", quote="guilty on all counts.")
+        emit_grounded(d, POOL, cid="c1", text="x", src="iau-2006", quote="   ")
 
-
-# --- tier 2c: grounded words (the hack against 'real but irrelevant quote') --
-
-def test_irrelevant_whole_sentence_is_now_refused_mechanically():
-    # Previously this needed a judge; 2c catches it: the claim's words
-    # (pluto/dwarf/planet) are absent from the quote.
-    d = ForcingDecoder()
-    with pytest.raises(UngroundedClaim):
-        emit_grounded(d, POOL, cid="c1", text="Pluto is a dwarf planet.",
-                      src="iau-2006", quote="The IAU met in 2006.")
-
-
-def test_claim_cannot_introduce_new_facts():
-    # red-team 4a: real quote, claim asserts an unsupported conclusion.
-    d = ForcingDecoder()
-    with pytest.raises(UngroundedClaim):
-        emit_grounded(
-            d, POOL, cid="c1",
-            text="The patient has cancer and needs chemotherapy.",
-            src="iau-2006", quote=PLUTO)
-
-
-# --- tier 2d: negation parity (polarity flip using the source's own words) ---
-
-def test_polarity_flip_with_source_words_is_refused():
-    # The claim uses only words present in the quote but drops the negation:
-    # "not guilty" -> "guilty". 2c passes (words match); 2d catches the flip.
-    d = ForcingDecoder()
-    with pytest.raises(UngroundedClaim):
-        emit_grounded(
-            d, POOL, cid="c1",
-            text="The defendant was found guilty on all counts.",
-            src="court",
-            quote="The defendant was found not guilty on all counts.")
-
-
-# --- tier 3: the honest residue still needs a judge -------------------------
-
-def test_relation_reversal_passes_mechanics_and_needs_a_judge():
-    # Claim uses only the quote's words, with matching polarity, but reverses the
-    # relation ("fever reduces the drug"). Mechanics cannot catch it; the judge
-    # is the only line. With no judge it is ACCEPTED (stated honestly).
-    d = ForcingDecoder()
-    c = emit_grounded(d, POOL, cid="c1", text="Fever reduces the drug.",
-                      src="pk", quote="The drug reduces fever.")
-    assert c.quote == "The drug reduces fever."     # mechanics let it through
-
-    # A semantic judge is required to reject it.
-    d2 = ForcingDecoder()
-
-    def judge(claim_text, quote):
-        return "drug reduces fever" in claim_text.lower()
-
-    with pytest.raises(UnfaithfulCitation):
-        emit_grounded(d2, POOL, cid="c1", text="Fever reduces the drug.",
-                      src="pk", quote="The drug reduces fever.", judge=judge)
-
-
-# --- happy paths ------------------------------------------------------------
 
 def test_well_grounded_claim_passes():
     d = ForcingDecoder()
@@ -126,63 +60,68 @@ def test_well_grounded_claim_passes():
     assert c.src == "iau-2006" and c.quote == PLUTO and c.src_hash
 
 
-def test_reconciliation_still_applies_on_top_of_grounding():
+# --- extractive mode (sound: an exact equality, not a heuristic) ------------
+
+def test_extractive_requires_the_claim_to_be_the_quote():
     d = ForcingDecoder()
-    emit_grounded(d, POOL, cid="c1", text="Water boils at 100 C.",
-                  src="nist", quote="Water boils at 100 C at standard pressure.",
-                  key="boil")
-    with pytest.raises(Exception):    # conflicting claim, no reconciling edge
-        emit_grounded(d, POOL, cid="c2", text="Water boils at 90 C.",
-                      src="myth", quote="Some people think water boils at 90 C.",
-                      key="boil")
-
-
-# --- problem 2: pool poisoning -> tamper-evidence ---------------------------
-
-def test_reverify_passes_against_an_untouched_pool():
-    d = ForcingDecoder()
-    c = emit_grounded(d, POOL, cid="c1", text="Pluto is a dwarf planet.",
-                      src="iau-2006", quote=PLUTO)
-    assert reverify(POOL, c) is True
-
-
-def test_reverify_detects_a_tampered_source():
-    d = ForcingDecoder()
-    c = emit_grounded(d, POOL, cid="c1", text="Pluto is a dwarf planet.",
-                      src="iau-2006", quote=PLUTO)
-    poisoned = SourcePool(dict(POOL.sources,
-                               **{"iau-2006": "The IAU met in 2006. "
-                                              "It declared Pluto the tenth planet."}))
-    with pytest.raises(TamperedSource):
-        reverify(poisoned, c)
-
-
-# --- extractive mode: makes the 'wrong relation' residue impossible ---------
-
-def test_extractive_mode_blocks_relation_reversal():
-    # The residue case (Fever reduces the drug) is refused without any judge,
-    # because the claim must BE the quote verbatim.
-    d = ForcingDecoder()
-    with pytest.raises(UngroundedClaim):
+    with pytest.raises(FabricatedQuote):
         emit_grounded(d, POOL, cid="c1", text="Fever reduces the drug.",
                       src="pk", quote="The drug reduces fever.", extractive=True)
 
 
-def test_extractive_mode_accepts_the_verbatim_claim():
+def test_extractive_accepts_the_verbatim_claim():
     d = ForcingDecoder()
     c = emit_grounded(d, POOL, cid="c1", text="The drug reduces fever.",
                       src="pk", quote="The drug reduces fever.", extractive=True)
     assert c.text == c.quote
 
 
-# --- trusted reference link: names the external trust root ------------------
+# --- 2. the single judge, with full context, owns all meaning ---------------
 
-def test_untrusted_link_is_refused():
-    from forcing_function.grounded import UntrustedSource
-    pool = SourcePool(
-        {"x": "Vaccines cause harm."},
-        uris={"x": "http://evil.example/forged"},
-        trusted_domains={"eur-lex.europa.eu", "pubmed.ncbi.nlm.nih.gov"})
+def test_judge_with_full_context_catches_cherry_picking():
+    # The quote is a true verbatim sentence, but the source's NEXT sentence
+    # qualifies it. No mechanical tier can see that; a judge given the whole
+    # source can. This is the case that used to need an endless heuristic.
+    d = ForcingDecoder()
+
+    def judge(claim, quote, source):
+        # a real judge is an NLI/LLM; here a stand-in: the claim is unfaithful if
+        # the source qualifies the quote with a restricting clause it omits.
+        return "only" not in source.lower() or "only" in claim.lower()
+
+    with pytest.raises(UnfaithfulCitation):
+        emit_grounded(d, POOL, cid="c1", text="The fee is waived.",
+                      src="fee", quote="The fee is waived.", judge=judge)
+
+
+def test_judge_receives_the_whole_source():
+    seen = {}
+
+    def judge(claim, quote, source):
+        seen["source"] = source
+        return True
+
+    d = ForcingDecoder()
+    emit_grounded(d, POOL, cid="c1", text="Pluto is a dwarf planet.",
+                  src="iau-2006", quote=PLUTO, judge=judge)
+    assert seen["source"] == POOL.text("iau-2006")     # full text, not just quote
+
+
+def test_no_judge_means_only_integrity_is_checked():
+    # Honest: without a judge, a relation reversal passes (mechanics cannot see
+    # meaning). The judge is the only line; this is stated, not hidden.
+    d = ForcingDecoder()
+    c = emit_grounded(d, POOL, cid="c1", text="Fever reduces the drug.",
+                      src="pk", quote="The drug reduces fever.")
+    assert c.quote == "The drug reduces fever."
+
+
+# --- trusted link: fails closed --------------------------------------------
+
+def test_untrusted_origin_is_refused():
+    pool = SourcePool({"x": "Vaccines cause harm."},
+                      uris={"x": "http://evil.example/forged"},
+                      trusted_domains={"eur-lex.europa.eu"})
     d = ForcingDecoder()
     with pytest.raises(UntrustedSource):
         emit_grounded(d, pool, cid="c1", text="Vaccines cause harm.",
@@ -190,11 +129,20 @@ def test_untrusted_link_is_refused():
                       require_trusted_link=True)
 
 
-def test_trusted_link_passes_and_is_recorded():
-    pool = SourcePool(
-        {"reg": "The additive is banned in food."},
-        uris={"reg": "https://eur-lex.europa.eu/eli/reg/2023/1"},
-        trusted_domains={"eur-lex.europa.eu"})
+def test_required_link_fails_closed_when_no_allowlist():
+    # V4: require_trusted_link with no trusted_domains must REFUSE, not accept.
+    pool = SourcePool({"x": "The sky is blue."},
+                      uris={"x": "http://anything.example/x"})  # trusted_domains=None
+    d = ForcingDecoder()
+    with pytest.raises(UntrustedSource):
+        emit_grounded(d, pool, cid="c1", text="The sky is blue.",
+                      src="x", quote="The sky is blue.", require_trusted_link=True)
+
+
+def test_trusted_origin_passes_and_records_uri():
+    pool = SourcePool({"reg": "The additive is banned in food."},
+                      uris={"reg": "https://eur-lex.europa.eu/eli/reg/2023/1"},
+                      trusted_domains={"eur-lex.europa.eu"})
     d = ForcingDecoder()
     c = emit_grounded(d, pool, cid="c1", text="The additive is banned in food.",
                       src="reg", quote="The additive is banned in food.",
@@ -202,9 +150,66 @@ def test_trusted_link_passes_and_is_recorded():
     assert c.uri == "https://eur-lex.europa.eu/eli/reg/2023/1"
 
 
-def test_missing_link_is_refused_when_required():
-    from forcing_function.grounded import UntrustedSource
+# --- tamper-evidence: fails closed -----------------------------------------
+
+def test_reverify_passes_against_untouched_pool():
     d = ForcingDecoder()
-    with pytest.raises(UntrustedSource):   # POOL has no uris
-        emit_grounded(d, POOL, cid="c1", text="Pluto is a dwarf planet.",
-                      src="iau-2006", quote=PLUTO, require_trusted_link=True)
+    c = emit_grounded(d, POOL, cid="c1", text="Pluto is a dwarf planet.",
+                      src="iau-2006", quote=PLUTO)
+    assert reverify(POOL, c) is True
+
+
+def test_reverify_detects_tampering():
+    d = ForcingDecoder()
+    c = emit_grounded(d, POOL, cid="c1", text="Pluto is a dwarf planet.",
+                      src="iau-2006", quote=PLUTO)
+    poisoned = SourcePool(dict(POOL.sources,
+                               **{"iau-2006": "The IAU declared Pluto a planet."}))
+    with pytest.raises(TamperedSource):
+        reverify(poisoned, c)
+
+
+def test_reverify_fails_closed_without_a_hash():
+    # V6: a claim with no recorded hash is unverifiable, not silently valid.
+    from forcing_function.constrained_decode import Claim
+    fake = Claim(id="c1", text="x", src="iau-2006", quote=PLUTO, src_hash=None)
+    with pytest.raises(TamperedSource):
+        reverify(POOL, fake)
+
+
+def test_reverify_rechecks_trust_when_required():
+    # V5: a repointed link is caught on re-verification.
+    pool = SourcePool({"reg": "The additive is banned in food."},
+                      uris={"reg": "https://eur-lex.europa.eu/eli/reg/2023/1"},
+                      trusted_domains={"eur-lex.europa.eu"})
+    d = ForcingDecoder()
+    c = emit_grounded(d, pool, cid="c1", text="The additive is banned in food.",
+                      src="reg", quote="The additive is banned in food.",
+                      require_trusted_link=True)
+    repointed = SourcePool(pool.sources,
+                           uris={"reg": "https://evil.example/x"},
+                           trusted_domains={"eur-lex.europa.eu"})
+    with pytest.raises(TamperedSource):
+        reverify(repointed, c, require_trusted_link=True)
+
+
+# --- the non-bypassable surface (V7) ----------------------------------------
+
+def test_grounded_decoder_has_no_ungrounded_path():
+    # V7: GroundedDecoder exposes only cite(); there is no bare emit()/apply().
+    gd = GroundedDecoder(POOL)
+    assert not hasattr(gd, "emit") and not hasattr(gd, "apply")
+    c = gd.cite(cid="c1", text="Pluto is a dwarf planet.", src="iau-2006",
+                quote=PLUTO)
+    assert c.src == "iau-2006" and gd.claims[-1] is c
+    with pytest.raises(UnresolvableSource):
+        gd.cite(cid="c2", text="x", src="not-in-pool", quote=PLUTO)
+
+
+def test_reconciliation_still_applies_through_the_surface():
+    gd = GroundedDecoder(POOL)
+    gd.cite(cid="c1", text="It reclassified Pluto as a dwarf planet.",
+            src="iau-2006", quote=PLUTO, key="pluto")
+    with pytest.raises(Exception):     # conflicting key, no reconciling edge
+        gd.cite(cid="c2", text="The drug reduces fever.", src="pk",
+                quote="The drug reduces fever.", key="pluto")

@@ -1,125 +1,55 @@
-"""Grounding layer: push the source from 'present' to 'resolvable + verbatim +
-word-bounded', and the pool from 'trusted' to 'tamper-evident'.
+"""Grounding layer — two primitives, nothing in between.
 
-The base forcing function (constrained_decode.py) guarantees a claim carries a
-non-blank source — but a model under pressure invents one ("general
-knowledge..."). This layer hardens that, mechanically where it can and honestly
-flagging where it cannot:
+The earlier design grew a middle layer of half-mechanical heuristics
+(whole-sentence, grounded-words, negation-parity). A pentest showed each one was
+both *unsound* (bypassable: abbreviation sentence-splits, qualifier omission,
+off-list polarity words) and *incomplete* (the residue is endless). Chasing
+meaning with wordlists is a losing, never-ending game. So that middle is gone.
+What is left is two clean primitives:
 
-  Tier 1  RESOLVABILITY    src must be an id in a pre-supplied SourcePool.
-                           => an invented source is impossible by construction.
-  Tier 2  VERBATIM QUOTE   the claim carries a `quote` that appears verbatim in
-                           that source.
-                           => a fabricated quote is impossible (exact substring).
-  Tier 2b WHOLE SENTENCE   the quote must be a run of whole sentences.
-                           => slicing a sub-span to drop a negation is impossible
-                              ("...not guilty..." -> "guilty...").
-  Tier 2c GROUNDED WORDS   every content word in the claim must occur in the
-                           quote (stopwords/negations excluded).
-                           => the claim cannot introduce an entity, number or
-                              predicate absent from the evidence; this kills the
-                              "real but irrelevant quote" attack mechanically,
-                              the case previously thought to need a judge.
-  Tier 2d NEGATION PARITY  the claim's negation cues must match the quote's.
-                           => you cannot reuse the source's own words to assert
-                              the opposite polarity ("infection found" from
-                              "no infection found").
-  Tier 3  FAITHFULNESS     does the (real, word-bounded) quote actually entail
-                           the claim? Still semantic. Delegated to a fallible
-                           `judge`. Tiers 2c/2d shrink its job to the genuinely
-                           hard residue (correct relation among shared words);
-                           they do not eliminate it.
+  1. MECHANICAL PROVENANCE INTEGRITY — finite and sound:
+       resolvable source   src must be a SourcePool id        -> no invented source
+       verbatim quote      quote is an exact substring of src -> no fabricated quote
+       tamper-evident      sha256 fingerprint (fail-closed)   -> later edits detected
+       trusted origin      link in an allowlist (fail-closed) -> named, accountable root
+       extractive (opt.)   claim text == quote                -> no paraphrase channel
 
-Honest limits that remain:
-  * 2c/2d are NECESSARY, not SUFFICIENT, conditions for faithfulness: a claim
-    built only from the quote's words, with matching polarity, can still misorder
-    a relation. That residue is the judge's, and the judge is fallible.
-  * Pool poisoning: provenance is only as honest as the pool's contents. We make
-    it TAMPER-EVIDENT (each source is fingerprinted; a claim records src_hash, so
-    later edits are detectable and a claim can be re-verified against the source).
-    We cannot make it TRUSTWORTHY here — that needs an external trust anchor
-    (sources signed by an accountable issuer, re-fetched and re-checked at audit
-    time). Tamper-evidence moves the trust to a named, verifiable root; it does
-    not conjure trust from nothing.
+  2. SEMANTIC FAITHFULNESS — one fallible judge, with FULL CONTEXT:
+       judge(claim, quote, source) decides whether the quote, *seen inside the
+       whole source*, actually supports the claim. Omission, cherry-picking,
+       relation reversal, polarity — all of it lives here, in a single check that
+       sees the entire source. No wordlists, no sentence regex.
+
+Form is provable; meaning is judged. well-formedness, not truth.
 """
 
 import hashlib
-import re
+from urllib.parse import urlparse
 
 from forcing_function.constrained_decode import (
     ForcingDecoder, NeedsProvenance, IllegalAction)
 
-_SENTENCE = re.compile(r"\S.*?[.!?](?=\s|$)", re.S)
-
-# Function words and negation cues. Negations are kept OUT of the content-word
-# set on purpose: dropping/adding a negation must be caught by polarity (2d),
-# not silently allowed by word-containment (2c).
-_STOP = {
-    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being", "of",
-    "to", "in", "on", "at", "for", "and", "or", "as", "that", "this", "it",
-    "its", "by", "with", "from", "has", "have", "had", "will", "would", "can",
-    "could", "all", "any", "some", "so", "but", "if", "then", "than", "into",
-    "over", "under", "after", "before", "they", "he", "she", "we", "you", "i",
-}
-_NEG = {
-    "no", "not", "never", "none", "without", "cannot", "nor", "neither",
-    "denies", "denied", "deny", "absence", "absent", "negative", "ruled",
-    "excludes", "excluded", "lacks", "lacking", "fails", "failed", "unable",
-}
-
-
-def _tokens(s):
-    return re.findall(r"[a-z0-9]+", s.lower())
-
-
-def _content_words(s):
-    return {t for t in _tokens(s) if t not in _STOP and t not in _NEG}
-
-
-def _negations(s):
-    toks = set(_tokens(s))
-    cues = {t for t in toks if t in _NEG}
-    if "n't" in s.lower() or "n’t" in s.lower():
-        cues.add("nt")
-    return cues
-
-
-def _sentence_run(body, quote):
-    """True iff `quote` is one or more consecutive whole sentences of `body`."""
-    spans = [(m.start(), m.end()) for m in _SENTENCE.finditer(body)]
-    starts = {s for s, _ in spans}
-    ends = {e for _, e in spans}
-    idx = body.find(quote)
-    while idx != -1:
-        if idx in starts and idx + len(quote) in ends:
-            return True
-        idx = body.find(quote, idx + 1)
-    return False
-
 
 class UnresolvableSource(NeedsProvenance):
-    """Tier 1: the cited source id is not in the pool (invented source)."""
+    """The cited source id is not in the pool (invented source)."""
 
 
 class FabricatedQuote(NeedsProvenance):
-    """Tier 2 / 2b: the quote is not a verbatim whole-sentence span of the src."""
-
-
-class UngroundedClaim(IllegalAction):
-    """Tier 2c/2d: the claim uses words or polarity not present in the quote."""
-
-
-class UnfaithfulCitation(IllegalAction):
-    """Tier 3: the (fallible) judge ruled the quote does not support the claim."""
+    """The quote is not an exact substring of the cited source (or, in extractive
+    mode, the claim is not the quote verbatim)."""
 
 
 class UntrustedSource(NeedsProvenance):
-    """A trusted reference link was required but the source has no link, or its
-    link's origin is not in the pool's trusted-domain allowlist."""
+    """A trusted link was required but the source has none, the pool declares no
+    allowlist, or the link's origin is not on it."""
+
+
+class UnfaithfulCitation(IllegalAction):
+    """The (fallible) judge ruled the quote, in context, does not support the claim."""
 
 
 class TamperedSource(Exception):
-    """Re-verification: the source text no longer matches the recorded hash."""
+    """Re-verification failed: the source changed, vanished, or is unverifiable."""
 
 
 def fingerprint(text):
@@ -127,25 +57,18 @@ def fingerprint(text):
 
 
 def _domain(uri):
-    from urllib.parse import urlparse
     return (urlparse(uri).hostname or "").lower()
 
 
 class SourcePool:
-    """The closed set of sources a model is allowed to cite, each fingerprinted
-    so tampering is detectable. A model cannot cite anything outside it, so
-    provenance cannot be invented; and a later edit to a source is detectable via
-    its hash.
-
-    Optionally each source carries a reference `uri` (a resolvable link), and the
-    pool declares `trusted_domains`: an allowlist of authoritative publishers.
-    The allowlist is the *named, accountable trust root* — citing is then limited
-    to sources that link to an origin you have decided to trust. This does not
-    create trust from nothing; it makes the root explicit and enforceable."""
+    """The closed set of sources a model may cite. Each is fingerprinted (so
+    later edits are detectable) and may carry a reference `uri`. `trusted_domains`
+    is the named, accountable trust root: when set, citing is limited to sources
+    whose link origin is on the allowlist."""
 
     def __init__(self, sources, uris=None, trusted_domains=None):
-        self.sources = dict(sources)            # id -> full source text
-        self.uris = dict(uris or {})            # id -> reference link
+        self.sources = dict(sources)
+        self.uris = dict(uris or {})
         self.trusted_domains = (set(d.lower() for d in trusted_domains)
                                 if trusted_domains is not None else None)
 
@@ -160,77 +83,49 @@ class SourcePool:
         return None if body is None else fingerprint(body)
 
 
-def emit_grounded(d, pool, cid, text, src, quote, key=None, rels=(), judge=None,
-                  whole_sentence=True, grounded_words=True, negation_parity=True,
-                  extractive=False, require_trusted_link=False):
-    """Emit a claim only if its source resolves, its quote is verbatim (and, by
-    default, whole-sentence and word-bounded), polarity matches, and an optional
-    judge accepts. Atomic: every check runs before the underlying emit().
+def emit_grounded(d, pool, cid, text, src, quote, key=None, rels=(),
+                  judge=None, extractive=False, require_trusted_link=False):
+    """Finalize a cited claim, or refuse. Mechanical integrity is enforced
+    unconditionally; meaning is left to `judge(claim, quote, source)` if supplied.
+    Atomic: every check runs before the underlying emit(), so a refusal leaves the
+    decoder state untouched.
 
-    Flags trade safety for flexibility (all default to the safe setting):
-      whole_sentence   quote must be whole sentence(s)        (blocks negation-drop)
-      grounded_words   claim's content words must be in quote (blocks new facts /
-                       irrelevant quotes)
-      negation_parity  claim & quote negation cues must match (blocks polarity flip)
-      extractive       the claim text must BE the quote verbatim. This makes the
-                       'wrong relation among shared words' residue impossible —
-                       you cannot reorder or drop what you must reproduce exactly
-                       — at the cost of no paraphrase/synthesis. The strongest
-                       answer to Case 1, when faithful wording matters more than
-                       fluency (statutes, dosages, contract clauses).
-      require_trusted_link  the source must carry a reference link whose origin is
-                       in the pool's trusted-domain allowlist. This names the
-                       external trust root for Case 2: provenance is limited to
-                       authoritative publishers you chose to trust. It does not
-                       conjure trust — it relocates it to an accountable origin
-                       and makes the citation independently re-fetchable.
+      extractive            require the claim text to BE the quote verbatim
+                            (removes the paraphrase channel entirely).
+      require_trusted_link  the source must carry a link whose origin is on the
+                            pool's trusted-domain allowlist; fails closed if the
+                            allowlist is unset.
     """
-    # Tier 1 — resolvable: invented sources are impossible.
+    # --- mechanical provenance integrity ---
     body = pool.text(src)
     if body is None:
         raise UnresolvableSource(
             f"src {src!r} is not in the source pool {sorted(pool.sources)}")
-    # Tier 1b — trusted link: provenance limited to an accountable, named root.
     if require_trusted_link:
         uri = pool.uri(src)
         if not uri:
             raise UntrustedSource(f"src {src!r} has no reference link")
-        if pool.trusted_domains is not None and _domain(uri) not in pool.trusted_domains:
+        if pool.trusted_domains is None:                       # fail closed
+            raise UntrustedSource(
+                "require_trusted_link is set but the pool declares no "
+                "trusted_domains; refusing rather than trusting any origin")
+        if _domain(uri) not in pool.trusted_domains:
             raise UntrustedSource(
                 f"link {uri!r} (origin {_domain(uri)!r}) is not in the trusted "
                 f"allowlist {sorted(pool.trusted_domains)}")
-    # Tier 2 — verbatim: fabricated quotes are impossible.
     if not (quote and quote.strip()):
         raise FabricatedQuote(f"claim {cid!r} needs a verbatim quote from {src!r}")
     if quote not in body:
         raise FabricatedQuote(
             f"quote {quote!r} does not appear verbatim in source {src!r}")
-    # Tier 2b — whole-sentence: a sub-span cannot strip a negation or context.
-    if whole_sentence and not _sentence_run(body, quote):
-        raise FabricatedQuote(
-            f"quote {quote!r} is a partial span; it must be whole sentence(s) "
-            f"of source {src!r} (else a sub-span could reverse its meaning)")
-    # Tier 2e — extractive: the claim is the quote, so no relation can be twisted.
     if extractive and text.strip() != quote.strip():
-        raise UngroundedClaim(
-            f"claim {cid!r} is not extractive: in extractive mode the claim must "
-            f"be the quote verbatim (no paraphrase), got {text!r} != {quote!r}")
-    # Tier 2c — grounded words: the claim cannot say more than the quote does.
-    if grounded_words:
-        missing = _content_words(text) - _content_words(quote)
-        if missing:
-            raise UngroundedClaim(
-                f"claim {cid!r} uses words absent from its quote: {sorted(missing)}"
-                f" (it may only assert what the quote's words support)")
-    # Tier 2d — negation parity: same polarity as the quote.
-    if negation_parity and bool(_negations(text)) != bool(_negations(quote)):
-        raise UngroundedClaim(
-            f"claim {cid!r} negation does not match its quote "
-            f"(claim={sorted(_negations(text))} quote={sorted(_negations(quote))})")
-    # Tier 3 — faithful: semantic, hence a fallible judge, not a guarantee.
-    if judge is not None and not judge(text, quote):
+        raise FabricatedQuote(
+            f"extractive: claim {cid!r} must be the quote verbatim, "
+            f"got {text!r} != {quote!r}")
+    # --- semantic faithfulness: one judge, full source as context ---
+    if judge is not None and not judge(text, quote, body):
         raise UnfaithfulCitation(
-            f"claim {cid!r} is not supported by its quote (judge rejected)")
+            f"claim {cid!r} is not supported by its quote in context (judge rejected)")
     c = d.emit(cid=cid, text=text, src=src, key=key, rels=rels)
     c.quote = quote
     c.src_hash = pool.hash(src)
@@ -238,15 +133,48 @@ def emit_grounded(d, pool, cid, text, src, quote, key=None, rels=(), judge=None,
     return c
 
 
-def reverify(pool, claim):
+def reverify(pool, claim, require_trusted_link=False):
     """Independent re-check of a finalized claim against the (possibly reloaded)
-    pool: the source must still exist, hash to the recorded fingerprint, and
-    still contain the quote. Detects pool poisoning / tampering after the fact."""
+    pool. Fails closed: a claim with no recorded hash is unverifiable, not valid."""
     body = pool.text(claim.src)
     if body is None:
         raise TamperedSource(f"source {claim.src!r} vanished from the pool")
-    if claim.src_hash is not None and pool.hash(claim.src) != claim.src_hash:
+    if claim.src_hash is None:                                 # fail closed
+        raise TamperedSource(
+            f"claim {claim.id!r} has no recorded src_hash; unverifiable")
+    if pool.hash(claim.src) != claim.src_hash:
         raise TamperedSource(f"source {claim.src!r} changed since the claim was made")
     if claim.quote and claim.quote not in body:
         raise TamperedSource(f"quote no longer present in source {claim.src!r}")
+    if require_trusted_link:
+        uri = pool.uri(claim.src)
+        if (not uri or pool.trusted_domains is None
+                or _domain(uri) not in pool.trusted_domains):
+            raise TamperedSource(
+                f"source {claim.src!r} no longer has a trusted link")
     return True
+
+
+class GroundedDecoder:
+    """The non-bypassable citation surface. It owns a pool and exposes only
+    `cite()`, so there is no ungrounded `emit()`/`apply()` path to forget — the
+    integrity checks are not optional. Use this, not a bare ForcingDecoder, when
+    every claim must be cited."""
+
+    def __init__(self, pool, judge=None, extractive=False,
+                 require_trusted_link=False):
+        self._d = ForcingDecoder()
+        self._pool = pool
+        self._judge = judge
+        self._extractive = extractive
+        self._require_trusted_link = require_trusted_link
+
+    def cite(self, cid, text, src, quote, key=None, rels=()):
+        return emit_grounded(
+            self._d, self._pool, cid, text, src, quote, key=key, rels=rels,
+            judge=self._judge, extractive=self._extractive,
+            require_trusted_link=self._require_trusted_link)
+
+    @property
+    def claims(self):
+        return self._d.state.output
