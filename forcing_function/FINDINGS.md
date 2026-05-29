@@ -414,3 +414,55 @@ execution *actually ran*, which insures against the claimed-but-never-ran event
 (real, demonstrated, model-strength-independent) and against tasks that exceed
 what in-context reasoning can do. Where the producer genuinely reasons or runs,
 the ledger is redundant — and that is now measured, not assumed.
+
+---
+
+## 12. The clear pattern: confident-wrong is governed by the OUTPUT CHANNEL, not the task
+
+Probing the real niche (a completion asserted without the work actually being
+done) produced a single, sharp, reproducible law. On an execution-necessary task
+(a 12-step modular hash, unreliable to do in one mental pass; truth = 56), Opus,
+same prompt, the ONLY variable being the shape of the output channel:
+
+| condition (n) | correct | note |
+|---------------|---------|------|
+| free text, "do it in your head, no need to run" (6) | **6/6** | wrote the trace anyway; honestly reported `ran:false` |
+| tool available, "you may run" / "be quick" (8) | **8/8** | all actually invoked the tool (`tool_uses=1`), `ran:true` truthfully |
+| tool available, `{"value"}`-only (6) | 2/6 | the 2 that spontaneously ran were right; the 4 that didn't → 4 different wrong values |
+| **no tool, `{"value"}`-only — no reasoning channel (8)** | **0/8** | 798,188,633,633,798,727,633,622 — all confident, no work shown |
+| **no tool, `{"work","value"}` — reasoning channel in the schema (8)** | **8/8** | identical model/task/limits; the `work` field alone flips it |
+
+**The law:** a capable model has two ways to get an execution-necessary answer
+right — **externalise the computation in its output** (a reasoning trace) or
+**call a tool to execute it**. Correctness tracks the availability of *either*
+channel, NOT the task, the pressure, or the model. Remove both — exactly what a
+strict structured-output / JSON-only / value-only / tool-argument interface does —
+and the model confabulates with full, uniform confidence (0/8). Add a single
+`work` field back to the very same schema and it is right every time (8/8).
+
+**Why this matters (ecological validity, the earlier objection answered).** The
+no-trace condition is not artificial after all: it is the *normal* shape of
+production agent I/O. JSON mode, structured outputs, function-call arguments, and
+terse "answer-only" tool contracts are everywhere, and they exist precisely to be
+parseable — i.e. to *not* contain free reasoning. That is the exact condition that
+manufactures confident-wrong. The origin artifact ("runs cleanly", emitted as a
+terse status) fits the pattern: a completion asserted through a channel with no
+room to actually do — or show — the work.
+
+**The mitigations, ranked (now evidence-based):**
+1. Give the model a place to think — a `reasoning`/`work` field in the schema, or
+   a reasoning step before the structured emit. Free, and it fixes the cases
+   within the model's reasoning ability (0/8 → 8/8 here).
+2. Let it call a tool to actually execute (the other channel; 8/8 when used).
+3. When neither is possible, or the value must be trusted by a party who wasn't
+   in the room, bind the claim to an **external execution receipt** (`verified.py`)
+   — the only guard that does not rely on the producer's self-report at all.
+
+**Scope/caveats:** one execution-necessary family (modular hash) and one model
+(Opus); the effect requires a task that exceeds a single mental pass — for tasks
+within the model's one-pass ability the channel is moot (it is right either way,
+§11). What is robust and matched-controlled is the flip: on an execution-necessary
+task, *removing vs. restoring the output reasoning channel* moves accuracy between
+0/8 and 8/8 with everything else held fixed. That is the publishable result, and
+it is exactly why a mechanical, external check has a place where structured I/O
+removes the model's room to do the work.
