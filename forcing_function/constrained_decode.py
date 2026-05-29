@@ -53,6 +53,7 @@ class Claim:
     src: str
     key: str = None
     rels: list = field(default_factory=list)
+    quote: str = None          # set by the grounded layer: a verbatim span of src
 
 
 class State:
