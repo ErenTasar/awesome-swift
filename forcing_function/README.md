@@ -50,6 +50,48 @@ producer is not the reader — legal memos, clinical summaries, compliance repor
 agent pipelines where one step must trust another's output. For low-stakes
 single-user chat it is overhead.
 
+### Accountability A/B (n=1 per cell, fictional 5-question scenario)
+
+A second A/B, on the accountability axis this time. Two models (Opus, Haiku)
+answered five questions about a *fictional* drug under two contracts: **control**
+(free report, asked to cite, "answer every question") and **treatment** (the
+ledger — a fact must bind to a verbatim quote or be left "not stated"; conflicts
+need a reconciling edge). Every proposed claim was then graded mechanically
+through `grounded.py`; the model's own "it works" was never trusted — each output
+was re-run by hand, per the accident above.
+
+| arm | shipped defects (reach reader) | conflict recorded as edge | abstained on the 2 absent-fact traps | post-hoc tamper detectable |
+|-----|----|----|----|----|
+| control × Opus  | 1 — a `supersedes` edge pointing at a not-yet-recorded claim, so the conflict was never actually linked | no  | no — attached a real but tangential quote | n/a (free prose has no `src_hash`) |
+| control × Haiku | 1 — a claim with a `null` source | yes | no — same over-citation | n/a |
+| treatment × Opus  | 0 | yes | yes | 4/4 |
+| treatment × Haiku | 0 | yes | yes | 4/4 |
+
+Read honestly:
+
+- **No content/honesty gap, and strength bought nothing.** Both control models
+  surfaced the corrected figure in prose and neither invented a cure rate; weak ≈
+  strong on every cell. The effect, where there is one, is the mechanism's, not
+  the model's — the same conclusion the accuracy run reached.
+- **What the ledger mechanically caught** that a reader would likely wave through:
+  a claim with no resolvable source (Haiku), and an edge that *looked* reconciled
+  in prose but did not resolve, leaving two conflicting figures stored unlinked
+  (Opus). Both shipped in control; both were refused in treatment.
+- **What was behavioral, not mechanical.** On the absent-fact traps the control
+  models attached a verbatim-but-tangential quote — which *passes* `cite()` (the
+  quote is real). The treatment models abstained because the contract told them
+  to, not because the mechanism forced it. Semantic over-citation is the judge's
+  job, not the mechanism's — exactly the documented residue.
+- **What is structural** (and must not be oversold): treatment auditability 1.00
+  and tamper-detection 4/4 hold partly by construction — `cite()` refuses what it
+  cannot verify, and records an `src_hash` free prose never has. The honest claim
+  is not "the tool made the model better" but "the tool makes provenance checkable
+  by someone who was not in the room, and refuses the structurally broken
+  citations a reader would miss."
+
+Caveats: n=1 per cell; the control arm was *given* structured (id, quote) output
+it would not have in true free form, and still shipped a defect in each cell.
+
 ## The three guarantees
 
 **1. Mechanical provenance integrity — finite and sound.**
