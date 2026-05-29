@@ -750,3 +750,20 @@ is the finding worth carrying: not "the receipt is a great product," but "a
 parse-optimised output channel manufactures confident-wrong on exactly the
 high-stakes computed fields production agents emit." (Harness ephemeral, not
 committed.)
+
+**It is not arithmetic-specific — it reproduces in pure logic.** Same matched
+control, a non-numeric task: given 8 boolean assignments, evaluate 8 nested
+compound propositions (and/or/not/==/!=) and count how many are True (truth = 6).
+
+| arm (n) | result |
+|---------|--------|
+| value-only, reasoning NOT externalised (2 of 4) | **0/2** — emitted **4** and **5**, both `certain:true` (two different wrong counts) |
+| value-only that wrote the per-proposition evaluation anyway (2 of 4) | 2/2 — 6 |
+| `{"work",…}` (2) | 2/2 — 6 |
+
+So the confidence false-positive is **cognitive-mode-independent**: serial
+arithmetic, multi-item summation, interval sweeping (§13), and now propositional
+logic all show the identical signature — withhold the externalised reasoning and a
+capable model commits a confident, stochastic-magnitude wrong answer; restore it
+(a `work` field, or the model reasoning of its own accord) and it is right. The
+determinant is externalised reasoning, not the domain.
