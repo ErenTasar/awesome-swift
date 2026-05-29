@@ -13,8 +13,11 @@ Run:  cd /home/user/awesome-swift && PYTHONPATH=. python3 forcing_function/redte
 from forcing_function.constrained_decode import ForcingDecoder
 from forcing_function.grounded import (
     SourcePool, emit_grounded,
-    UnresolvableSource, FabricatedQuote, UnfaithfulCitation,
+    UnresolvableSource, FabricatedQuote, UngroundedClaim, UnfaithfulCitation,
 )
+
+_REFUSALS = (UnresolvableSource, FabricatedQuote, UngroundedClaim,
+             UnfaithfulCitation)
 
 
 # A small fixed pool with real-ish multi-sentence sources.
@@ -47,7 +50,7 @@ def attempt(label, **kw):
         print(f"            claim: {c.text!r}")
         print(f"            src={c.src!r} quote={c.quote!r}")
         return ("ACCEPTED", c)
-    except (UnresolvableSource, FabricatedQuote, UnfaithfulCitation) as e:
+    except _REFUSALS as e:
         print(f"[REFUSED ] {label}")
         print(f"            {type(e).__name__}: {e}")
         return ("REFUSED", e)
@@ -169,7 +172,7 @@ def attempt_pool(label, pool, **kw):
         print(f"            claim: {c.text!r}")
         print(f"            src={c.src!r} quote={c.quote!r}")
         return ("ACCEPTED", c)
-    except (UnresolvableSource, FabricatedQuote, UnfaithfulCitation) as e:
+    except _REFUSALS as e:
         print(f"[REFUSED ] {label}")
         print(f"            {type(e).__name__}: {e}")
         return ("REFUSED", e)

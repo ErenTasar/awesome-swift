@@ -74,6 +74,32 @@ via `grammar.gbnf` + llama.cpp, for the context-free provenance half.
 PYTHONPATH=. pytest forcing_function/test_forcing_function.py -q
 ```
 
+## Grounding layer (`grounded.py`): from "present" to "resolvable + verbatim"
+
+The base layer forces a non-blank source, but a model under pressure invents one.
+`emit_grounded()` hardens provenance against a closed `SourcePool`, converting as
+much of "is this citation honest?" into mechanical checks as possible:
+
+| tier | check | defeats | guarantee |
+|------|-------|---------|-----------|
+| 1 resolvable | `src` is an id in the pool | invented sources | mechanical |
+| 2 verbatim | `quote` is an exact substring of the source | fabricated quotes | mechanical |
+| 2b whole-sentence | quote is a run of whole sentences | dropping a leading negation (`not guilty`→`guilty`) | mechanical |
+| 2c grounded-words | every content word of the claim occurs in the quote | irrelevant quotes / new invented facts | mechanical |
+| 2d negation-parity | claim and quote negation cues match | polarity flips using the source's own words | mechanical (heuristic) |
+| 3 faithfulness | optional `judge(claim, quote)` | wrong *relation* among shared words | fallible judge |
+
+2c/2d are *necessary, not sufficient* — a claim built only from the quote's
+words, with matching polarity, can still misorder a relation; that residue is the
+judge's, and the judge is fallible. A red-team (`redteam_grounded.py`) gets every
+mechanical attack refused; only judge-residue and pool-poisoning remain.
+
+For pool poisoning, sources are fingerprinted (sha256) and a claim records
+`src_hash`; `reverify()` re-checks a claim against the (possibly reloaded) pool
+and detects tampering. This makes provenance *tamper-evident*; making it
+*trustworthy* needs an external signed root (re-fetch the canonical source at
+audit time), which is out of scope for the local layer.
+
 ## Prior art (and why this is a real gap)
 
 A survey of constrained-decoding engines (GBNF/llama.cpp, Outlines, Guidance,
