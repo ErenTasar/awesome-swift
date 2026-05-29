@@ -19,7 +19,7 @@ reference function) — none requires a provider key or external authority.
 
 import hashlib
 import json
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 from forcing_function.verified import _run, _show, digest  # reuse the runner
 
@@ -118,6 +118,25 @@ class Ledger:
     def summary(self):
         return [(cid, r.kind, r.claim) for cid, r in self.receipts]
 
+    def save(self, path):
+        """Persist (cid, Receipt) pairs so a *later stage or another process* can
+        re-verify them — the trust handoff verified.py already does for execution
+        receipts, here for every kind. The receipt's `evidence` is what re-derives
+        the check; the live roots that cannot be serialised (a Recompute's
+        reference fn, a Quote's source text) are re-supplied at reverify time."""
+        with open(path, "w") as fh:
+            json.dump([{"cid": cid, **asdict(r)} for cid, r in self.receipts],
+                      fh, indent=2)
+
+
+def load_ledger(path):
+    """Load (cid, Receipt) pairs written by Ledger.save()."""
+    with open(path) as fh:
+        raw = json.load(fh)
+    return [(d["cid"], Receipt(d["kind"], d["claim"], d["ok"],
+                               d.get("detail", ""), d.get("evidence", {})))
+            for d in raw]
+
 
 def reverify(receipt, *, source=None, fn=None, cwd=None, timeout=120):
     """Independently re-derive a receipt. Fails closed. Re-supply the live root
@@ -135,3 +154,23 @@ def reverify(receipt, *, source=None, fn=None, cwd=None, timeout=120):
             raise Unverified("reverify(recompute) needs the reference fn")
         return fn(**e["inputs"]) == e["claimed"]
     raise Unverified(f"unknown receipt kind {receipt.kind!r}")
+
+
+def reverify_from_disk(path, *, fns=None, sources=None, cwd=None, timeout=120):
+    """Load a saved ledger and re-derive every receipt. Returns [(cid, bool)].
+
+    Honest fail-closed contract: `command` receipts re-run from their stored
+    evidence alone, but `recompute` and `quote` need a live root the JSON cannot
+    hold — supply them per-claim via `fns` (cid -> reference fn) and `sources`
+    (cid -> source text). A claim whose required root is missing re-derives to
+    False, never silently True."""
+    fns, sources = fns or {}, sources or {}
+    out = []
+    for cid, r in load_ledger(path):
+        try:
+            ok = reverify(r, fn=fns.get(cid), source=sources.get(cid),
+                          cwd=cwd, timeout=timeout)
+        except Unverified:
+            ok = False   # missing root for this kind => fail closed
+        out.append((cid, ok))
+    return out
