@@ -88,3 +88,48 @@ def test_invalid_call_records_nothing():
     led = Ledger()
     CHARGE.validate({**CART, "total_cents": 23734}, ledger=led, id_prefix="call1.")
     assert led.receipts == []
+
+
+# --- fill: the receipt as provider (the §16 abstain case) -------------------
+
+import hashlib
+
+def sha8(s):
+    return hashlib.sha256(s.encode()).hexdigest()[:8]
+
+HASHER = GuardedTool("digest", computed={"first8": Derived(sha8, ["s"])})
+
+
+def test_fill_supplies_a_field_the_model_abstained_on():
+    # the §16 scenario: a thinking model honestly leaves a reasoning-impossible
+    # field unset (certain:false); fill computes it deterministically.
+    out, res = HASHER.fill({"s": "forcing function"})        # first8 absent
+    assert res.ok
+    assert out["first8"] == "e3fafd48"                       # the real ground truth
+    assert res.filled == {"first8": "e3fafd48"}
+
+
+def test_fill_treats_none_as_abstain():
+    out, res = HASHER.fill({"s": "forcing function", "first8": None})
+    assert res.ok and out["first8"] == "e3fafd48"
+    assert "first8" in res.filled
+
+
+def test_fill_still_verifies_an_emitted_field_and_refuses_a_wrong_one():
+    out, res = HASHER.fill({"s": "forcing function", "first8": "e3fafd48"})
+    assert res.ok and res.filled == {}                       # emitted+correct: verified, not filled
+    out, res = HASHER.fill({"s": "forcing function", "first8": "deadbeef"})
+    assert res.ok is False
+    assert res.corrections == {"first8": "e3fafd48"}
+
+
+def test_fill_records_supplied_value_to_ledger():
+    led = Ledger()
+    HASHER.fill({"s": "forcing function"}, ledger=led, id_prefix="d.")
+    assert led.summary() == [("d.first8", "recompute", "digest.first8 := 'e3fafd48' (supplied)")]
+
+
+def test_fill_cannot_fill_when_inputs_missing():
+    out, res = HASHER.fill({})                               # no `s` to hash
+    assert res.ok is False
+    assert "missing input" in str(res.corrections["first8"])

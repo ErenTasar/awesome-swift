@@ -56,6 +56,16 @@ def main():
     except Unverified:
         print("  Unverified raised — the wrong charge never executed.")
 
+    # fill() — the receipt as PROVIDER (FINDINGS §16). A thinking model honestly
+    # abstains on a reasoning-impossible field (measured: Opus said certain:false
+    # 4/4 on a SHA-256 rather than fabricate). The receipt supplies it.
+    import hashlib
+    HASHER = GuardedTool("digest", computed={
+        "first8": Derived(lambda s: hashlib.sha256(s.encode()).hexdigest()[:8], ["s"])})
+    print("\nfill(): model abstained on first8 (could not compute the hash by reasoning):")
+    out, res = HASHER.fill({"s": "forcing function"})        # first8 left unset
+    print(f"  supplied first8 = {out['first8']!r}  (filled={list(res.filled)})")
+
 
 if __name__ == "__main__":
     main()

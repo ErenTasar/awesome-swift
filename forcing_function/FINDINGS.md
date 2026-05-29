@@ -623,3 +623,74 @@ no-tool layers really answered in one pass; the layer-3 result is deterministic 
 re-runnable, not a model judgement. (The A/B harness was ephemeral and is not
 committed, per the working rules; the layer-3 guarantee is permanent in
 `tool_guard.py` + `tool_guard_demo.py`.)
+
+---
+
+## 16. Does the receipt help a *thinking* model? (probing without rigging the channel)
+
+Every §10–§13 result manufactured confident-wrong by **removing the model's
+reasoning channel** (value-only / no-trace). That is a real production condition,
+but it left a fair objection: if the only way to make the model wrong is to gag it,
+the receipt's value is marginal for a model that *is* allowed to think. So we
+probed the opposite — reasoning fully free, never rigged — across three axes,
+escalating, feeding each result into the next. The discipline (the user's, and the
+sharp one): **do not try to fool the model's reasoning** (no gag, no JSON-only, no
+"don't think"); make it wrong, if at all, only where reasoning *structurally cannot
+reach*. Opus subagents, n graded by hand against an independently-computed truth,
+`tool_uses` checked.
+
+| axis | what it tests | setup (reasoning FREE) | result | truth-checked |
+|------|---------------|------------------------|--------|---------------|
+| **scale** | does a long deterministic chain exceed one-pass reasoning? | modular hash, depth 20/35/50, "show every step, be careful, `certain:false` is free", no tools | **6/6 correct, all `certain:true`** | yes (12 / 773 / 245) |
+| **execution-grounding** | competence-dense real code with sly edges | `add_months` (month-end clamp, leap, neg `n`); reasoning **and** tools free | **4/4 impls, 12/12 adversarial cases** (incl. 1900 vs 2000 century-leap), tool & no-tool alike | yes (independent ref) |
+| **reasoning-impossible** | a value reasoning *cannot* derive | first 8 hex of `sha256("forcing function")`, no tools, `certain:false` explicitly fine | **0/4 fabrication** — all four said `certain:false` | yes (`e3fafd48`) |
+
+**The three negatives collapse into one positive finding.** Not fooled, Opus does
+not produce a confident-wrong — *neither* on what reasoning can do (it is exactly
+right: scale 6/6, code 12/12) *nor* on what reasoning cannot do (it honestly
+abstains: hash 0/4 fabrication, one run literally `"that value is a placeholder…
+the certain:false is the honest part"`). The user's standing intuition — a strong
+model rarely takes the bait — is **confirmed a third time, and strengthened**: the
+model is well-calibrated at *both* ends.
+
+**This re-reads §13.** The confident-wrong there was never an intelligence gap. The
+`{"value"}`-only channel denied the model the ability to say `certain:false` — it
+suppressed not the reasoning but the *calibration*. Give the same model a `work`
+field (§12: 8/8) **or** the right to abstain (§16: 4/4 honest) and the
+confident-wrong vanishes. The failure is a property of the **channel**, not the
+mind.
+
+**So where does the receipt genuinely help a thinking model? (the honest answer,
+now measured.)** Its value is **zero** as an intelligence patch — three axes, never
+rigged, all negative. Its value is real and non-zero in exactly three places, none
+of which is about the model being dumb:
+
+1. **Reasoning-impossible computed fields — the receipt as *provider*, not
+   checker.** When the model correctly declines a field it cannot derive (a hash, a
+   crypto digest, a large product, a real execution result), the receipt *supplies*
+   it deterministically. This is the cleanest "helps a thinking model" case: it
+   does the one thing the model rightly refused to guess. Built and tested:
+   `GuardedTool.fill()` validates an emitted field but **computes an abstained
+   one** — demoed on the exact §16 SHA-256 the subagents declined (`first8 →
+   e3fafd48`).
+2. **Channel-suppressed calibration (§13).** When the interface (value-only / JSON
+   / function-call args) strips the model's ability to either reason *or* abstain,
+   the external recompute receipt restores from outside what the channel removed.
+3. **Persistence / drift / trust handoff (§8/§10).** The model was right at t₁;
+   inputs/code/sources change by t₂ and nobody re-checks. `reverify()` catches the
+   regression with zero tokens and no re-reasoning, and a consumer who never saw the
+   producer's reasoning can trust the value. This is cost and trust, not IQ.
+
+**Verdict.** The receipt does not make a thinking model smarter — measured, it
+cannot, because the model is already calibrated when you don't rig its channel. It
+helps a thinking model only by (a) doing what the model honestly cannot, (b)
+undoing what a parse-optimised channel takes away, and (c) carrying a verified
+value across time and trust boundaries for free. Honest, narrow, and real — and the
+`fill()` provider path is the one piece of *new* positive value this round added.
+
+**Caveats:** one model (Opus), small n per axis (2–4), three task families; this
+measures calibration, not a rate. What is robust is the qualitative law, now seen
+from both sides: *unrigged, the model is right where it can be and abstains where it
+cannot* — so the receipt's role is supplier / channel-restorer / trust-carrier, not
+brain. (Subagent harness ephemeral, not committed; `fill()` + tests + demo are
+permanent.)

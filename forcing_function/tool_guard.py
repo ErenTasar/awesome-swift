@@ -47,6 +47,7 @@ class GuardResult:
     args: dict                              # the emitted args (unchanged)
     receipts: list = field(default_factory=list)       # [(field, Receipt)] that passed
     corrections: dict = field(default_factory=dict)    # field -> expected value / reason
+    filled: dict = field(default_factory=dict)         # field -> value supplied for an abstained field
 
     def retry_prompt(self):
         """A model-readable correction to feed back as the next turn. Empty when ok."""
@@ -115,3 +116,49 @@ class GuardedTool:
         if not res.ok:
             raise Unverified(res.retry_prompt())
         return res
+
+    def fill(self, args, *, ledger=None, id_prefix=""):
+        """The receipt as *provider*, not just checker — the measured §16 case.
+
+        For each declared computed field: if the model EMITTED it, validate it
+        (refuse on mismatch, exactly like validate); if the model ABSTAINED — left
+        it missing or None, which a thinking model honestly does for a value it
+        cannot compute by reasoning (a hash, a crypto digest, a large product;
+        FINDINGS §16: Opus said `certain:false` 4/4 rather than fabricate) — COMPUTE
+        it from the emitted inputs and supply it. Returns (filled_args, GuardResult)
+        where `result.filled` lists the fields the receipt provided. A field whose
+        inputs are themselves missing cannot be filled and becomes a correction.
+
+        This is where the receipt helps a *reasoning-capable* model: it does not
+        make the model smarter, it does the one thing the model correctly declined
+        to guess — deterministically, locally rooted, zero tokens."""
+        out = dict(args)
+        receipts, corrections, verifiers, filled = [], {}, [], {}
+        for fld, derived in self.computed.items():
+            try:
+                kw = derived.kwargs(args)
+            except KeyError as e:
+                corrections[fld] = f"missing input {e.args[0]!r}"   # cannot fill or check
+                continue
+            computed = derived.fn(**kw)
+            if args.get(fld) is None:                 # abstained -> provide it
+                out[fld] = computed
+                filled[fld] = computed
+                r = Recompute(f"{self.name}.{fld} := {computed!r} (supplied)",
+                              derived.fn, kw, computed).check()
+                receipts.append((fld, r)); verifiers.append((fld, r))
+            else:                                     # emitted -> verify it
+                if args[fld] == computed:
+                    r = Recompute(f"{self.name}.{fld} == {args[fld]!r}",
+                                  derived.fn, kw, args[fld]).check()
+                    receipts.append((fld, r)); verifiers.append((fld, r))
+                else:
+                    corrections[fld] = computed
+        ok = not corrections
+        if ok and ledger is not None:
+            for fld, r in verifiers:
+                ledger.receipts.append((f"{id_prefix}{fld}", r))
+                ledger._ids.add(f"{id_prefix}{fld}")
+        res = GuardResult(ok, self.name, out, [(f, r) for f, r in receipts],
+                          corrections, filled)
+        return out, res
