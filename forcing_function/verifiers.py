@@ -19,6 +19,7 @@ reference function) — none requires a provider key or external authority.
 
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass, field
 
 from forcing_function.verified import _run, _show, digest  # reuse the runner
@@ -94,6 +95,60 @@ class Quote:
                        {"quote": self.quote, "source_digest": digest(self.source)})
 
 
+class CrossConsistency:
+    """Bind a whole-value claim to an aggregation of the parts the producer ALSO
+    emitted: e.g. an invoice `total` against `sum(line_items)`. Unlike Recompute
+    it needs no reference fn — it catches a structure that disagrees with itself,
+    which is the cheap, common case for emitted report/invoice fields. Trust root:
+    internal arithmetic consistency of the emitted parts. `agg` defaults to sum."""
+    kind = "cross"
+
+    def __init__(self, claim, parts, whole, agg=sum):
+        self.claim, self.parts, self.whole, self.agg = claim, parts, whole, agg
+
+    def check(self):
+        expected = self.agg(self.parts)
+        ok = (expected == self.whole)
+        return Receipt(self.kind, self.claim, ok,
+                       "" if ok else f"whole {self.whole!r} != {self.agg.__name__}(parts) {expected!r}",
+                       {"parts": self.parts, "whole": self.whole, "expected": expected,
+                        "agg": getattr(self.agg, "__name__", "agg")})
+
+
+class FileAbsent:
+    """Bind an 'I removed/renamed every occurrence' claim to a filesystem scan: it
+    records only if `pattern` appears ZERO times across `paths`. Trust root: the
+    local file contents (the path list rides in the receipt, so reverify re-scans
+    them — catching a regression that reintroduces the pattern). Defeats the
+    'updated all the call-sites' confabulation.
+
+    Honest scope: this is a regex/text scan (grep's exit codes are a foot-gun), NOT
+    a semantic AST pass — a hit inside a comment or string still counts. Tighten the
+    pattern (e.g. word boundaries) for call-site precision; the residue is the
+    caller's to bind well, exactly the §14 adequacy residue."""
+    kind = "file_absent"
+
+    def __init__(self, claim, pattern, paths, flags=0):
+        self.claim, self.pattern, self.paths, self.flags = claim, pattern, list(paths), flags
+
+    def check(self):
+        rx = re.compile(self.pattern, self.flags)
+        hits, total = [], 0
+        for p in self.paths:
+            try:
+                with open(p, encoding="utf-8", errors="replace") as fh:
+                    n = len(rx.findall(fh.read()))
+            except FileNotFoundError:
+                n = -1   # a missing scanned file is a defect, not a silent pass
+            if n != 0:
+                hits.append((p, n)); total += max(n, 1)
+        ok = (total == 0)
+        return Receipt(self.kind, self.claim, ok,
+                       "" if ok else f"pattern {self.pattern!r} still present: {hits}",
+                       {"pattern": self.pattern, "flags": self.flags,
+                        "paths": self.paths, "hits": hits})
+
+
 # --- the ledger: record only what verifies -----------------------------------
 
 class Ledger:
@@ -138,9 +193,11 @@ def load_ledger(path):
             for d in raw]
 
 
-def reverify(receipt, *, source=None, fn=None, cwd=None, timeout=120):
+def reverify(receipt, *, source=None, fn=None, agg=None, cwd=None, timeout=120):
     """Independently re-derive a receipt. Fails closed. Re-supply the live root
-    where it is code/text (a Quote's `source`, a Recompute's `fn`)."""
+    where it is code/text (a Quote's `source`, a Recompute's `fn`, a
+    CrossConsistency's `agg` — default sum). `command`/`file_absent` carry their
+    root (the command, the path list) in the receipt and need nothing re-supplied."""
     e = receipt.evidence
     if receipt.kind == "command":
         r, _ = _run(e["cmd"], cwd, timeout)
@@ -153,23 +210,37 @@ def reverify(receipt, *, source=None, fn=None, cwd=None, timeout=120):
         if fn is None:
             raise Unverified("reverify(recompute) needs the reference fn")
         return fn(**e["inputs"]) == e["claimed"]
+    if receipt.kind == "cross":
+        return (agg or sum)(e["parts"]) == e["whole"]
+    if receipt.kind == "file_absent":
+        rx = re.compile(e["pattern"], e.get("flags", 0))
+        total = 0
+        for p in e["paths"]:
+            try:
+                with open(p, encoding="utf-8", errors="replace") as fh:
+                    n = len(rx.findall(fh.read()))
+            except FileNotFoundError:
+                return False
+            total += n
+        return total == 0
     raise Unverified(f"unknown receipt kind {receipt.kind!r}")
 
 
-def reverify_from_disk(path, *, fns=None, sources=None, cwd=None, timeout=120):
+def reverify_from_disk(path, *, fns=None, sources=None, aggs=None,
+                       cwd=None, timeout=120):
     """Load a saved ledger and re-derive every receipt. Returns [(cid, bool)].
 
-    Honest fail-closed contract: `command` receipts re-run from their stored
-    evidence alone, but `recompute` and `quote` need a live root the JSON cannot
-    hold — supply them per-claim via `fns` (cid -> reference fn) and `sources`
-    (cid -> source text). A claim whose required root is missing re-derives to
-    False, never silently True."""
-    fns, sources = fns or {}, sources or {}
+    Honest fail-closed contract: `command` and `file_absent` re-derive from stored
+    evidence alone; `cross` re-derives with sum unless an `aggs[cid]` is supplied;
+    but `recompute` and `quote` need a live root the JSON cannot hold — supply them
+    per-claim via `fns` (cid -> reference fn) and `sources` (cid -> source text). A
+    claim whose required root is missing re-derives to False, never silently True."""
+    fns, sources, aggs = fns or {}, sources or {}, aggs or {}
     out = []
     for cid, r in load_ledger(path):
         try:
             ok = reverify(r, fn=fns.get(cid), source=sources.get(cid),
-                          cwd=cwd, timeout=timeout)
+                          agg=aggs.get(cid), cwd=cwd, timeout=timeout)
         except Unverified:
             ok = False   # missing root for this kind => fail closed
         out.append((cid, ok))

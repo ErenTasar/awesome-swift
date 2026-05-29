@@ -4,8 +4,8 @@ import sys
 import pytest
 
 from forcing_function.verifiers import (
-    Ledger, Recompute, Command, Quote, Receipt, reverify, reverify_from_disk,
-    load_ledger, Unverified)
+    Ledger, Recompute, Command, Quote, CrossConsistency, FileAbsent, Receipt,
+    reverify, reverify_from_disk, load_ledger, Unverified)
 
 PY = sys.executable
 
@@ -119,6 +119,65 @@ def test_reverify_from_disk_recompute_and_quote_need_resupplied_roots(tmp_path):
     # roots re-supplied => passes
     assert reverify_from_disk(p, fns={"amt": _total}, sources={"cite": src}) == \
         [("amt", True), ("cite", True)]
+
+
+# --- cross-consistency: total == sum(parts) ---------------------------------
+
+def test_cross_refuses_total_that_disagrees_with_its_parts():
+    led = Ledger()
+    with pytest.raises(Unverified):
+        led.record("inv", CrossConsistency("invoice total 9000", [3897, 4999, 1500], 9000))
+    assert led.receipts == []
+
+
+def test_cross_records_and_reverifies(tmp_path):
+    led = Ledger()
+    r = led.record("inv", CrossConsistency("invoice total 10396", [3897, 4999, 1500], 10396))
+    assert r.ok and r.evidence["expected"] == 10396
+    assert reverify(r) is True            # default sum, no root needed
+    p = tmp_path / "led.json"
+    led.save(p)
+    assert reverify_from_disk(p) == [("inv", True)]
+
+
+def test_cross_custom_agg():
+    led = Ledger()
+    r = led.record("cnt", CrossConsistency("item count 3", [[1], [2], [3]], 3, agg=len))
+    assert r.ok
+    assert reverify(r, agg=len) is True
+
+
+# --- file-absent: 'I updated every call-site' -------------------------------
+
+def test_file_absent_refuses_when_pattern_present(tmp_path):
+    f = tmp_path / "a.py"
+    f.write_text("x = old_api()\ny = old_api()\n")
+    led = Ledger()
+    with pytest.raises(Unverified) as ei:
+        led.record("migrated", FileAbsent("removed all old_api calls",
+                                          r"\bold_api\b", [str(f)]))
+    assert "still present" in str(ei.value)
+
+
+def test_file_absent_records_when_clean_and_reverifies(tmp_path):
+    f = tmp_path / "a.py"
+    f.write_text("x = new_api()\n")
+    led = Ledger()
+    r = led.record("migrated", FileAbsent("removed all old_api calls",
+                                          r"\bold_api\b", [str(f)]))
+    assert r.ok
+    p = tmp_path / "led.json"
+    led.save(p)
+    assert reverify_from_disk(p) == [("migrated", True)]   # path rides in the receipt
+    # a regression that reintroduces the pattern is caught on reverify
+    f.write_text("x = old_api()\n")
+    assert reverify_from_disk(p) == [("migrated", False)]
+
+
+def test_file_absent_missing_scanned_file_is_a_defect_not_a_pass():
+    led = Ledger()
+    with pytest.raises(Unverified):
+        led.record("m", FileAbsent("clean", r"x", ["/no/such/file/here.py"]))
 
 
 def test_recompute_survives_tuple_to_list_json_roundtrip(tmp_path):
