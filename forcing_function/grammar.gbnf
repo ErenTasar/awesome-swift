@@ -1,0 +1,23 @@
+# Provenance-forcing grammar — the CONTEXT-FREE half of the forcing function.
+# Usable directly with llama.cpp:  ./main -m model.gguf --grammar-file grammar.gbnf
+#
+# This forces every claim to carry a NON-EMPTY source: the `source ::= char+`
+# production cannot match the empty string, so the decoder physically cannot
+# finalize a claim whose source slot is empty. (Note: this is strictly more than
+# JSON-Schema structured outputs can do — those guarantee the `source` *key*
+# exists but cannot require its value be non-empty; `minLength`/`pattern` are
+# unsupported there. A CFG's one-or-more `+` expresses it for free.)
+#
+# What this grammar CANNOT express is reconciliation: "if this claim's key was
+# already asserted, require a REL edge." That depends on what was emitted earlier
+# in the document (which keys are now 'seen'), which is context-sensitive and
+# outside any context-free grammar. That half lives in constrained_decode.py.
+
+root      ::= claim+
+claim     ::= "CLAIM(" text ") SRC(" source ")" key? rel? ";" "\n"
+text      ::= char+
+source    ::= char+                       # one-or-more  => non-empty source forced
+key       ::= " KEY(" char+ ")"
+rel       ::= " REL(" reltype ":" char+ ")"
+reltype   ::= "contradicts" | "supersedes" | "refines"
+char      ::= [^()\n;]
