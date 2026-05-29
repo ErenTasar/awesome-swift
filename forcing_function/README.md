@@ -1,7 +1,8 @@
 # Citation Ledger
 
 The one idea worth keeping from the AIDF experiment, trimmed to what actually
-earns its place when you talk to a model through an **API** (no logit access).
+earns its place as an **accountability** layer for models reached through an API
+(no logit access).
 
 ## What this is
 
@@ -26,27 +27,16 @@ gd.cite(cid="k1",
 of that source; conflicting claims (shared `key`) raise until given a reconciling
 edge.
 
-## Why it is this small
+## What it is for (and what it is not)
 
-Earlier versions carried a token-mask "decoder" (the software analogue of masking
-logits) plus a GBNF grammar and demos. But over an API there are no logits to
-mask, so that machine was validation in disguise — and a cross-model A/B eval
-(Opus / Sonnet / Haiku, grounded vs. free-form) showed `cite()` delivers the
-identical, measurable value in a fraction of the code. So the mask machine, the
-grammar and the demos were deleted. What the eval actually credited remains:
+Across n=8 A/B runs on three models (Opus / Sonnet / Haiku), grounded mode
+produced **no accuracy gain** over a free-form answer that was already asked to
+cite. Strong or weak, the model got the hard cases right either way. So this is
+**not an accuracy aid** — it does not make a capable model smarter.
 
-- machine-verifiable citations (every quote is provably verbatim), and
-- explicit reconciliation of conflicting facts (the shared-`key` → edge rule).
-
-What the eval did **not** credit, stated honestly: across n=8 runs on three
-models (Opus / Sonnet / Haiku), grounded mode produced **no accuracy gain** over a
-free-form answer that was already asked to cite. Strong or weak, the model got the
-hard cases right either way. So this is **not an accuracy aid** — it does not make
-a capable model smarter.
-
-What it *is*: an **accountability** layer — it makes a model's output verifiable by
-someone who was not in the room. The sharpest evidence arrived by accident: in one
-Opus run an agent wrote an eval script against a *non-existent* API
+What it *is*: an **accountability** layer — it makes a model's output verifiable
+by someone who was not in the room. The sharpest evidence arrived by accident: in
+one Opus run an agent wrote an eval script against a *non-existent* API
 (`gd.finalized()`, `c.cid`) and confidently reported "runs cleanly." It had never
 run; a human caught it only by executing it. That is the thesis in one event — a
 strong model is not *less* accurate, it is *more convincingly wrong*, and the cost
@@ -55,11 +45,10 @@ checks an "it works" claim independently, automatically, for free.
 
 **Cost is not the objection.** `cite()` is a substring + hash check —
 microseconds, zero model tokens; the marginal cost over a normal answer is a few
-tokens of structure. (An earlier draft mis-attributed a huge token count to the
-ledger; that was a sandbox script-iteration artifact, not the ledger's cost.) The
-real limit is **scope**: it earns its place where the producer is not the reader —
-legal memos, clinical summaries, compliance reports, agent pipelines where one step
-must trust another's output. For low-stakes single-user chat it is overhead.
+tokens of structure. The real limit is **scope**: it earns its place where the
+producer is not the reader — legal memos, clinical summaries, compliance reports,
+agent pipelines where one step must trust another's output. For low-stakes
+single-user chat it is overhead.
 
 ## The three guarantees
 
@@ -94,10 +83,9 @@ ledger makes it explicit and accountable rather than pretending to remove it.
 - `grounded.py` — the whole thing: `SourcePool`, `GroundedDecoder.cite()`,
   `reverify()`, the `Claim` record, the error types.
 - `test_grounded.py` — the guarantees as tests (`PYTHONPATH=. pytest forcing_function/`).
-- `eval_treatment*.py` — the A/B eval scripts (Opus / Sonnet / Haiku) used to
-  decide what to keep; kept as evidence.
+- `example.py` — a runnable example (the working form of the snippet above).
 
-## Prior art (why the citation+reconciliation pairing is a real gap)
+## Prior art (why the citation + reconciliation pairing is a real gap)
 
 A survey of constrained-decoding engines (Outlines, Guidance, XGrammar,
 lm-format-enforcer, OpenAI/Anthropic structured outputs), citation methods (RARR,
