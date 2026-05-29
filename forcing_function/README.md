@@ -149,6 +149,7 @@ ledger makes it explicit and accountable rather than pretending to remove it.
   `reverify()`, the `Claim` record, the error types.
 - `test_grounded.py` — the guarantees as tests (`PYTHONPATH=. pytest forcing_function/`).
 - `example.py` — a runnable example (the working form of the snippet above).
+- `FINDINGS.md` — the standing, falsifiable record of what we concluded and how to overturn it.
 
 ## Prior art (why the citation + reconciliation pairing is a real gap)
 
