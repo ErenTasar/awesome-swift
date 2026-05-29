@@ -182,3 +182,65 @@ survived a fresh break attempt. The honest verdict in §5 holds: **no extractabl
 model-impossible product**; the only real, narrow value is deterministic,
 zero-cost, auditable rejection of structurally broken citations — plumbing-grade,
 not a standalone project. (Harness was temporary and is not committed.)
+
+---
+
+## 8. The reframe that clears the wall: from text provenance to execution claims
+
+§4 says a *remote, key-less, third-party* library holds no trust root, so it can
+build no model-impossible value. True — for that position. The move that pays off
+is to **change position**: stop verifying claims about the external world (which
+need an external root) and verify claims about **what an agent just did in the
+local environment** — whose trust root, *re-execution*, the harness already
+holds. No provider key, no timestamp authority. The root was available all along;
+we were standing in the wrong place.
+
+This is also where the project's evidence actually pointed. The text-honesty axis
+was dead because strong models are honest about text (§1). But the sharpest
+artifact (§3) was an execution-honesty failure: an agent reported "runs cleanly"
+for a script it never ran. That failure mode is real, model-impossible to
+self-police (the model is the thing being convincingly wrong), and locally
+checkable. So the forcing function was aimed at the wrong target.
+
+**Artifact (committed, working): `verified.py` — an execution ledger.** A
+completion claim is recordable only if the ledger itself runs a check and the
+check passes; an unbacked claim raises (fail-closed). Each recorded claim carries
+a `Receipt` (cmd, exit code, output digest, duration) that `reverify()` re-runs
+independently. `cite()` bound a text claim to a verbatim quote; `claim()` binds a
+"done/verified" claim to a real execution. Same philosophy — *form is executed,
+intent is judged* — aimed where it bites. (`verified_demo.py` reproduces the
+gd.finalized() artifact and shows it auto-refused; `test_verified.py`, 10 tests.)
+
+Dogfooding evidence, honest: writing the tests for this tool *with its own
+discipline* caught a real bug in it — receipts stored an argv list as a
+space-joined string, so `reverify()` re-ran it through the shell and mangled it.
+A free-form "the tests pass" would have shipped it; the failing check did not.
+
+**Empirical check, including the negative.** Three Opus runs implemented a hard
+SemVer-2.0.0 `compare()` (pre-release precedence — easy to get wrong without
+running) with no execution, and all three reported `ready: true`. Run against a
+hidden 15-case suite, **all three were actually correct (15/15)**. So on this
+task the strong model did *not* confabulate — §1 reasserts even here. The honest
+consequence: the ledger's value is **not** a high catch-rate against a capable
+model (catches are rare, as everywhere in this project). Its value is that it
+converts an *unverifiable* "it works" into a *verified, reproducible* one at zero
+marginal cost — eliminating the trust, not the model's competence — and lets a
+later stage `reverify()` the claim to catch regressions without re-reasoning.
+
+**Honest scope (what it is and is not).** It is not magic over CI: running a
+check is what CI and editor hooks already do. The non-trivial, genuinely
+under-served bit is *granularity and portability* — binding each load-bearing
+natural-language claim ("I updated all callers", "the migration is idempotent")
+to its own reproducible receipt, refusing the claim until it runs, and carrying
+that receipt across an agent handoff so a downstream step can re-verify exactly
+which upstream claim regressed. CI checks the repo; this checks the **claim**.
+The residue mirrors the citation judge: the harness cannot tell whether the
+*check actually tests the assertion* (you can bind "done" to `echo ok`); a human
+still authors meaningful checks. It makes the binding explicit, executed, and
+re-runnable — that is the contribution, stated without inflation.
+
+**Verdict update.** §5 stands for the citation ledger and for the remote-library
+position. But the question "is there extractable value here?" gets a qualified
+**yes** once you move to the local-harness position: execution-claim integrity is
+model-impossible, locally rooted, and real — modest as a product, but a genuine
+and correctly-aimed contribution rather than plumbing around someone else's root.

@@ -149,7 +149,15 @@ ledger makes it explicit and accountable rather than pretending to remove it.
   `reverify()`, the `Claim` record, the error types.
 - `test_grounded.py` — the guarantees as tests (`PYTHONPATH=. pytest forcing_function/`).
 - `example.py` — a runnable example (the working form of the snippet above).
+- `example_pipeline.py` — the temporal trust-handoff (drifted sources) demo.
 - `FINDINGS.md` — the standing, falsifiable record of what we concluded and how to overturn it.
+- `verified.py` — the **execution ledger** (see FINDINGS §8): the same
+  forcing-function aimed at agent *completion claims* instead of text. A
+  "done/verified" claim is recordable only if a check actually runs and passes;
+  `reverify()` re-runs the receipt. This is the one position where the value is
+  real and locally rooted (re-execution), not plumbing around someone else's
+  root. `verified_demo.py` reproduces the project's "runs cleanly" artifact and
+  catches it; `test_verified.py` has the guarantees as tests.
 
 ## Prior art (why the citation + reconciliation pairing is a real gap)
 
