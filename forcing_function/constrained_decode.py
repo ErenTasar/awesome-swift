@@ -138,12 +138,12 @@ class ForcingDecoder:
         elif atype == START:
             st.cur = _Building()
         elif atype == TEXT:
-            if not value:
-                raise IllegalAction("TEXT must be non-empty")
+            if not (value and value.strip()):
+                raise IllegalAction("TEXT must be non-blank")
             st.cur.text = value
         elif atype == SRC:
-            if not value:                                 # empty source is illegal
-                raise IllegalAction("SRC must be non-empty")
+            if not (value and value.strip()):            # blank source is illegal
+                raise IllegalAction("SRC must be non-blank")
             st.cur.src = value
         elif atype == KEY:
             st.cur.key = value
@@ -171,10 +171,10 @@ class ForcingDecoder:
         the finalized Claim or raises until the model supplies what is missing.
         Atomic — on refusal the decoder state is left untouched."""
         st = self.state
-        if not text:
+        if not (text and text.strip()):
             raise IllegalAction("text required")
-        if not src:
-            raise NeedsProvenance(f"claim {cid!r} needs a non-empty source")
+        if not (src and src.strip()):
+            raise NeedsProvenance(f"claim {cid!r} needs a non-blank source")
         if key in st.seen_keys and not any(
                 rt in RECONCILERS and tgt in st.ids for rt, tgt in rels):
             raise NeedsReconciliation(

@@ -133,3 +133,13 @@ def test_emit_succeeds_when_requirements_are_met():
     c2 = d.emit(cid="c2", text="3h", src="smith", key="hl",
                 rels=[("supersedes", "c1")])
     assert c2.rels == [("supersedes", "c1")]
+
+
+def test_whitespace_only_source_is_illegal():
+    # found by a real model in the loop: " " is truthy but not a source.
+    d = ForcingDecoder()
+    with pytest.raises(IllegalAction):
+        d.emit(cid="c1", text="a fact", src="   ")
+    d.apply(START); d.apply(TEXT, "a fact")
+    with pytest.raises(IllegalAction):
+        d.apply(SRC, "  ")
