@@ -163,8 +163,16 @@ ledger makes it explicit and accountable rather than pretending to remove it.
   executing; redundant when it actually ran).
 - `verifiers.py` — the **generalised** claim-to-receipt framework (FINDINGS §14):
   a pluggable `Verifier`/`Receipt`/`Ledger`. `Recompute` (computed-field integrity,
-  the §13 fix), `Command` (execution), `Quote` (citation) in one ledger;
-  `verifiers_demo.py` + `test_verifiers.py`.
+  the §13 fix), `Command` (execution), `Quote` (citation), `CrossConsistency`
+  (total = Σ parts), `FileAbsent` (call-site scan = 0) in one ledger;
+  `save`/`load_ledger`/`reverify_from_disk` persist and re-verify across a process
+  boundary (fail-closed on a missing root). `verifiers_demo.py` + `test_verifiers.py`.
+- `tool_guard.py` — `GuardedTool`: auto-bind every *computed* tool-call argument to
+  a `Recompute` (the §13 fix end-to-end). A wrong derived field refuses the call
+  with a model-readable correction (`validate`) or raises (`enforce`); ledger
+  recording is atomic. `tool_guard_demo.py` + `test_tool_guard.py`. The mitigation
+  ladder (reasoning field / tool call / recompute receipt) is measured side-by-side
+  on one task in FINDINGS §15.
 - `verified_demo.py` — reproduces the project's "runs cleanly" artifact and
   catches it; `example_agent_pipeline.py` — a producer→consumer handoff where
   `reverify()` pinpoints exactly the regressed claim across a process boundary;

@@ -518,18 +518,34 @@ unifies the whole project. `verifiers.py` names the pattern as a pluggable
 `Verifier` (each exposes `check() -> Receipt`; `reverify()` re-derives it) and a
 `Ledger` that records a claim only if its verifier passes. cite() and
 ActionLedger.claim() are revealed as two instances; we added the one §13 most
-demands. Built, tested (8 tests), demoed (`verifiers_demo.py`); 45 tests green.
+demands and then widened the kit. Built, tested (`test_verifiers.py`,
+`test_tool_guard.py`), demoed (`verifiers_demo.py`, `tool_guard_demo.py`); **64
+tests green**.
 
 | receipt kind (built) | binds the claim to | trust root (local) | catches |
 |----------------------|--------------------|--------------------|---------|
 | `Recompute` | an independent reference computation | a reference function | the §13 silent-wrong computed field (charge, count, total) |
 | `Command` | a real execution (exit/output) | local re-execution | "tests pass / it runs / done" confabulation |
 | `Quote` | a verbatim substring of a source | the source text | fabricated citations |
+| `CrossConsistency` | an aggregation of the parts also emitted | internal arithmetic | a whole (invoice total, count) that disagrees with its own parts — no reference fn needed |
+| `FileAbsent` | a regex scan hitting zero across paths | the local file contents | "I updated every call-site" confabulation (catches a reintroduction on reverify) |
 
-The demo makes the gain concrete: a model emitted `total_cents=23734` (a real
+Two more pieces landed: **persistence** (`Ledger.save` / `load_ledger` /
+`reverify_from_disk`) carries the receipts across a process boundary with a
+fail-closed root contract — `command`/`file_absent` re-derive from stored evidence
+alone, but `recompute`/`quote`/`cross` need a live root (reference fn, source,
+agg) re-supplied per-claim or they re-derive to `False`, never a silent `True`;
+and **`tool_guard.GuardedTool`**, which automates the highest-value use — declare
+which tool-call arguments are computed and how, and every emitted derived field is
+recomputed before the call is allowed, refusing the call with a model-readable
+correction (`validate`) or raising (`enforce`).
+
+The demos make the gain concrete: a model emitted `total_cents=23734` (a real
 value-only output from §13; truth 33681); `Recompute` refused it with the exact
-mismatch and recorded the correct value — deterministically, zero tokens, where a
-value-only function-call interface would have charged the wrong sum.
+mismatch and recorded the correct value — and `tool_guard_demo.py` runs the same
+wrong value through a refuse → correct → re-emit round trip, deterministically,
+zero tokens, where a value-only function-call interface would have charged the
+wrong sum.
 
 **Where the gains are (ranked by the evidence we hold), and where they are not:**
 
@@ -538,11 +554,12 @@ value-only function-call interface would have charged the wrong sum.
   standard JSON/function-calling interfaces cause. Domains: payments/billing,
   scheduling and resource allocation, tax/compliance figures, BI/report totals,
   any derived numeric or boolean decision field.
-- **Agentic completion claims (Command + future File-state/AST/Type).** Stop
-  confabulated "done/tests-pass/refactored-everywhere" in multi-step and
-  multi-agent pipelines; pinpoint which claim regressed on a handoff.
-- **Provenance / document internal-consistency (Quote + cross-consistency).**
-  Auditability and "total = sum of line items" where producer != reader.
+- **Agentic completion claims (Command + FileAbsent).** Stop confabulated
+  "done/tests-pass/refactored-everywhere" in multi-step and multi-agent pipelines;
+  pinpoint which claim regressed on a handoff. FileAbsent now covers the
+  "updated every call-site" case (text scan, honest about not being a semantic AST).
+- **Provenance / document internal-consistency (Quote + CrossConsistency).**
+  Auditability and "total = sum of line items" where producer != reader — now built.
 
 **Honest limits (the generalisation does not remove these):**
 
@@ -561,3 +578,48 @@ value-only function-call interface would have charged the wrong sum.
 So the scope can be widened cleanly, but its honest payoff is concentrated where a
 value is *computed or stateful* and the output channel gives the model no room to
 do the work — exactly the regime §12/§13 isolated.
+
+---
+
+## 15. The mitigation ladder, measured on one task (the three fixes side by side)
+
+§12 listed three mitigations (reasoning field / tool call / external receipt) but
+measured them in separate places. Here all three are put on the **same**
+execution-necessary task — a 12-step modular rolling hash, `t=(t*31+x)%1000` over
+`[7,23,99,4,56,81,12,67,33,88,5,41]`, truth computed independently first (**396**)
+— with the only variable being which mitigation is in play. Layers 1–2 are live
+Opus subagent behaviour (n=2/cell, `tool_uses` checked); layer 3 is the mechanical
+guarantee from `tool_guard`, run on the actual wrong values the subagents emitted.
+
+| layer | mitigation | result | note |
+|-------|-----------|--------|------|
+| 0 (baseline) | value-only `{"value"}`, no reasoning, tools forbidden | **0/2** — emitted 503, 749 | `tool_uses=0` (truly one-shot); two *different* wrong values = stochastic guessing |
+| 1 | `{"work","value"}` — reasoning field in the schema | **2/2** — both 396 | `tool_uses=0`; both wrote the full 12-step trace and were exact |
+| 2 | tool call allowed (may run code) | **2/2** — both 396 | `tool_uses=1`; both actually executed it |
+| 3 | value-only emit + `GuardedTool` recompute receipt | **caught both** | recompute refused 503 and 749 (correction → 396), recorded nothing; accepted 396 |
+
+**What this nails down, in one controlled place:**
+
+- The §12 flip reproduces on fresh runs: removing the reasoning channel on an
+  execution-necessary task takes a capable model from 2/2 to 0/2, and the two
+  wrong values differ run-to-run — the silent, *un-majority-votable* failure §13
+  warned about, seen directly.
+- Layers 1 and 2 are the cheap, model-side fixes and they work when available
+  (2/2 each) — give the model a `work` field, or let it run a tool. Where the
+  producer genuinely reasons or executes, the receipt is redundant (§11), and this
+  is the regime where it is.
+- Layer 3 is the only fix that does **not** depend on the producer's channel or
+  self-report at all: fed the model's own confidently-wrong emits (503, 749), the
+  recompute receipt refused both and handed back the correct 396 — the guard for
+  exactly the case where the interface (value-only / JSON / function-call args)
+  strips both model-side channels, which is the normal shape of production tool I/O.
+
+**Caveats (kept honest, as everywhere):** n=2/cell here is demonstrative, not a
+rate — the load-bearing n=8 matched-controls live in §12/§13; this section's job is
+only to show the three fixes acting on one identical task so the ladder is concrete
+rather than assembled from separate experiments. The subagent runs were graded by
+hand against the independently-computed truth (396), and `tool_uses` confirmed the
+no-tool layers really answered in one pass; the layer-3 result is deterministic and
+re-runnable, not a model judgement. (The A/B harness was ephemeral and is not
+committed, per the working rules; the layer-3 guarantee is permanent in
+`tool_guard.py` + `tool_guard_demo.py`.)
