@@ -118,15 +118,67 @@ around an external guarantee, not a guarantee we create.
 
 ## 6. How to falsify these findings (open questions for the next person)
 
-- **Accuracy=0 is n-limited.** Run larger n, harder corpora, or a *weak/uncareful*
-  generator (not Opus). If grounded mode ever beats free-form on accuracy at scale,
-  Finding §1 is wrong.
-- **Structural-defect rate.** We showed the class can ship; we did not measure how
-  often. Quantify the leak rate of null-source / unlinked-conflict defects in true
-  free-form output (not the structured-handicapped control we used).
+- **Accuracy=0 is n-limited.** _(Attempted — see §7: a weak generator under
+  pressure still showed zero gain; not yet falsified.)_ Run larger n, harder
+  corpora, or a *weak/uncareful* generator (not Opus). If grounded mode ever beats
+  free-form on accuracy at scale, Finding §1 is wrong.
+- **Structural-defect rate.** _(Attempted — see §7: ~8% clean-trap fabrication,
+  concentrated in the strong model under pressure.)_ We showed the class can ship;
+  the leak rate is low and a careful prompt matched the mechanism. Larger n /
+  harder traps could still move this.
 - **The theorem (§4) is the load-bearing claim.** To break it, name a value that is
   (a) model-impossible alone, (b) genuinely useful, and (c) deliverable by an
   API-level third party *without* leaning on a provider key or external authority.
   We could not. If one exists, that is the project.
 - **Verifier-role value.** The one role left to a third party is verifying someone
   else's root. Is there a real, non-trivial product there, or is it just plumbing?
+
+---
+
+## 7. Falsification round actually run (results, not just questions)
+
+The first three §6 questions were attempted directly. Artifact: temporary harness
+`_falsify.py` (fictional "Brenzal" corpus — 2 answerable, 1 contradiction, 2 clean
+absent-fact traps [flash point, LD50], 1 inference question), graded by
+deterministic atomic rules with every raw output re-read by hand. Arms: **Haiku
+×5 free + ×5 ledger** (the requested *weak/under-pressure* generator: "be
+definitive, no hedging"), **Opus ×2 free** (strength check).
+
+- **§1 (accuracy) — attempted with a weak generator under pressure; NOT
+  falsified.** All 12 runs scored accuracy 2/2 on the answerable questions, and
+  all 12 resolved the contradiction to the corrected value (8 ppm) *with* the
+  amendment noted — none picked the stale 12 ppm, none silently picked. The ledger
+  contract produced **zero** accuracy gain over free-form. Even Haiku, free-form,
+  was at ceiling. §1 stands.
+- **§2 (fabrication leak rate) — quantified.** Clean-trap fabrications (a specific
+  invented value for flash point / LD50): Haiku free **0/10**, Haiku ledger
+  **0/10**, Opus free **2/4**. The *only* fabrications came from the **strong**
+  model under no-hedge pressure — in one Opus run, "flash point is above its 4 °C
+  storage limit" and "LD50 falls within the Category 2 irritant range **(r4)**",
+  the latter citing a source that says nothing about LD50. This is §3's "more
+  convincingly wrong" pattern reproduced on demand, complete with a spurious
+  citation. A hard "NOT STATED or quote verbatim" rule (prompt *or* mechanism)
+  drove the leak to 0. So the defect the ledger blocks is **real but rare** here
+  (2 of 24 trap-answers, ~8%), and a careful prompt alone matched the mechanism on
+  this axis — the mechanism's edge over the prompt is only that it cannot be
+  ignored under pressure, which is exactly the narrow §5 value.
+- **§4 (the theorem) — attempted again, not broken.** No model-impossible +
+  useful + root-free value axis was found. Closest candidates and why each fails:
+  *determinism/zero-cost/auditability* is an engineering property, not
+  model-impossible (already credited in §2/§5); *sound negative knowledge* ("this
+  exact string is provably not in the pool") reduces to a `str.__contains__`
+  oracle any code — or the model — can run, and the *semantic* negative ("this
+  fact is not stated") is the deleted whack-a-mole; *set-level / non-repudiable
+  integrity* bottoms out at an external anchor. Sharpening: the tool's
+  tamper-evidence is genuine only against **accidental drift** (rotted links,
+  honest edits) — against an **adversary** who also controls the stored hash /
+  allowlist it needs an external root it does not hold; and against accidental
+  drift a model re-reading also catches it (the §2 drift row = 0). No gap in
+  either regime. The theorem is strengthened, not broken.
+
+**Net of this round:** every falsification attempt failed to overturn the
+findings; §1 and §2 survived a deliberately weak, pressured generator, and §4
+survived a fresh break attempt. The honest verdict in §5 holds: **no extractable
+model-impossible product**; the only real, narrow value is deterministic,
+zero-cost, auditable rejection of structurally broken citations — plumbing-grade,
+not a standalone project. (Harness was temporary and is not committed.)
