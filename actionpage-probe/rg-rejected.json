@@ -1,0 +1,37 @@
+{
+  "actionpage_experiment": "public-read-relay/0.1",
+  "decision": "Do not treat this response as satisfying the intent.",
+  "intent": {
+    "date": "1995-06-26"
+  },
+  "operation_effect": "read",
+  "receipt": {
+    "network_requests": 1,
+    "recipe": "rg-fihrist",
+    "upstream": [
+      {
+        "bytes": 198368,
+        "content_type": "text/html; charset=utf-8",
+        "duration_ms": 260,
+        "final_url": "https://www.resmigazete.gov.tr/",
+        "redirects": 1,
+        "sha256": "1e45de6e94773365163d0632814d441b2931434453087954fbc640aa86ca7af8",
+        "status": 200
+      }
+    ]
+  },
+  "result": null,
+  "source_mode": "observed",
+  "state": "unavailable",
+  "state_scope": "public_projection",
+  "validation": {
+    "facts": {
+      "expected_date": "1995-06-26",
+      "expected_pdf_link_present": false,
+      "issue_number": 33322,
+      "observed_date": "2026-07-27"
+    },
+    "passed": false,
+    "reason": "intent_date_mismatch"
+  }
+}
