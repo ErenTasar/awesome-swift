@@ -1,0 +1,94 @@
+{
+  "actionpage_experiment": "public-read-relay/0.1",
+  "decision": "Use the validated result and stop.",
+  "intent": {
+    "location": "Bodrum",
+    "station": 94809
+  },
+  "operation_effect": "read",
+  "receipt": {
+    "network_requests": 2,
+    "recipe": "mgm-forecast",
+    "upstream": [
+      {
+        "bytes": 450,
+        "content_type": "application/json; charset=utf-8",
+        "duration_ms": 148,
+        "final_url": "https://servis.mgm.gov.tr/web/merkezler?sorgu=Bodrum&limit=50",
+        "redirects": 0,
+        "sha256": "a8b9a2e457662f93930b0b228b06eddcb0b95b0f7506769cea1f0ebc54a3961d",
+        "status": 200
+      },
+      {
+        "bytes": 1055,
+        "content_type": "application/json; charset=utf-8",
+        "duration_ms": 67,
+        "final_url": "https://servis.mgm.gov.tr/web/tahminler/gunluk?istno=94809",
+        "redirects": 0,
+        "sha256": "96b7f547da49f9921180628a24924204878dc9411c7534db3f9edc3e3cc03fd8",
+        "status": 200
+      }
+    ]
+  },
+  "result": {
+    "days": [
+      {
+        "date": "2026-07-27",
+        "event_code": "SCK",
+        "high_c": 35,
+        "low_c": 24,
+        "wind_direction": 306,
+        "wind_kph": 22
+      },
+      {
+        "date": "2026-07-28",
+        "event_code": "SCK",
+        "high_c": 37,
+        "low_c": 26,
+        "wind_direction": 315,
+        "wind_kph": 29
+      },
+      {
+        "date": "2026-07-29",
+        "event_code": "SCK",
+        "high_c": 40,
+        "low_c": 28,
+        "wind_direction": 342,
+        "wind_kph": 27
+      },
+      {
+        "date": "2026-07-30",
+        "event_code": "SCK",
+        "high_c": 39,
+        "low_c": 27,
+        "wind_direction": 317,
+        "wind_kph": 25
+      },
+      {
+        "date": "2026-07-31",
+        "event_code": "SCK",
+        "high_c": 38,
+        "low_c": 27,
+        "wind_direction": 283,
+        "wind_kph": 14
+      }
+    ],
+    "location": "Bodrum",
+    "observed_station": 94809,
+    "province": "Muğla"
+  },
+  "source_mode": "observed",
+  "state": "complete",
+  "state_scope": "public_projection",
+  "validation": {
+    "facts": {
+      "first_date": "2026-07-27",
+      "last_date": "2026-07-31",
+      "location": "Bodrum",
+      "province": "Muğla",
+      "station": 94809
+    },
+    "passed": true,
+    "reason": "intent_matches_response"
+  }
+}

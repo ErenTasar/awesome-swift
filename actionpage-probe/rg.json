@@ -1,0 +1,74 @@
+{
+  "actionpage_experiment": "public-read-relay/0.1",
+  "decision": "Use the validated result and stop.",
+  "intent": {
+    "date": "2026-06-26"
+  },
+  "operation_effect": "read",
+  "receipt": {
+    "network_requests": 1,
+    "recipe": "rg-fihrist",
+    "upstream": [
+      {
+        "bytes": 79120,
+        "content_type": "text/html; charset=utf-8",
+        "duration_ms": 181,
+        "final_url": "https://www.resmigazete.gov.tr/fihrist?tarih=2026-06-26",
+        "redirects": 0,
+        "sha256": "7bf8e5e92bd3eadcf10842c3c43969f0923c96a53904faa37732e3f1e1a60589",
+        "status": 200
+      }
+    ]
+  },
+  "result": {
+    "coverage": {
+      "capped": false,
+      "returned_items": 7
+    },
+    "date": "2026-06-26",
+    "issue_number": 33292,
+    "items": [
+      {
+        "title": "1488 Sayıştay Başkanlığı İçin Yapılan Seçime Dair Karar",
+        "url": "https://www.resmigazete.gov.tr/eskiler/2026/06/20260626-1.pdf"
+      },
+      {
+        "title": "Aydın Adnan Menderes Üniversitesi Diş Hekimliği Uygulama ve Araştırma Merkezi Yönetmeliği",
+        "url": "https://www.resmigazete.gov.tr/eskiler/2026/06/20260626-2.htm"
+      },
+      {
+        "title": "İthalatta Haksız Rekabetin Önlenmesine İlişkin Tebliğ (Tebliğ No: 2025/18)’de Değişiklik Yapılmasına Dair Tebliğ",
+        "url": "https://www.resmigazete.gov.tr/eskiler/2026/06/20260626-3.htm"
+      },
+      {
+        "title": "a - Yargı İlânları",
+        "url": "https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/2026/06/20260626-2.htm"
+      },
+      {
+        "title": "b - Artırma, Eksiltme ve İhale İlânları",
+        "url": "https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/2026/06/20260626-3.htm"
+      },
+      {
+        "title": "c - Çeşitli İlânlar",
+        "url": "https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/2026/06/20260626-4.htm"
+      },
+      {
+        "title": "T.C. Merkez Bankasınca Belirlenen Döviz Kurları ve Devlet İç Borçlanma Senetlerinin Günlük Değerleri",
+        "url": "https://www.resmigazete.gov.tr/ilanlar/eskiilanlar/2026/06/20260626-5.htm"
+      }
+    ]
+  },
+  "source_mode": "observed",
+  "state": "complete",
+  "state_scope": "public_projection",
+  "validation": {
+    "facts": {
+      "expected_date": "2026-06-26",
+      "expected_pdf_link_present": true,
+      "issue_number": 33292,
+      "observed_date": "2026-06-26"
+    },
+    "passed": true,
+    "reason": "intent_matches_response"
+  }
+}
